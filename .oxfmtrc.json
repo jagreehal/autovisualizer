@@ -1,0 +1,18 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  "tabWidth": 2,
+  "printWidth": 120,
+  "semi": false,
+  "singleQuote": false,
+  "trailingComma": "none",
+  "arrowParens": "always",
+  "ignorePatterns": [
+    "**/*.md",
+    "**/*.json",
+    "**/*.css",
+    "**/*.html",
+    "src/routeTree.gen.ts",
+    "src/components/ui/**",
+    "src/examples/**"
+  ]
+}

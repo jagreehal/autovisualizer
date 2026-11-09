@@ -1,0 +1,31 @@
+# dependencies
+node_modules
+.pnpm-store/
+
+# build output
+dist
+.output
+.vercel
+.tanstack
+
+# environment
+.env
+.env.*
+!.env.example
+
+# tests
+test-results/
+playwright-report/
+blob-report/
+coverage/
+
+# editor and OS
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+
+# logs and tool state
+*.log
+*.tsbuildinfo
+.claude/

@@ -1,0 +1,16 @@
+# CODEOWNERS: paths that change what CI runs and what gets installed.
+#
+# The owner is @jaggitadmin, an admin identity kept apart from the day-to-day
+# @jagreehal account and not signed in on developer machines. A compromised
+# day-to-day session cannot approve its own changes to these paths.
+#
+# These rules only take effect when:
+#   1. @jaggitadmin is a collaborator with write access (GitHub ignores the rule otherwise).
+#   2. The branch protection or ruleset on `main` has "Require review from Code Owners" on.
+
+/.github/workflows/      @jaggitadmin
+/.github/CODEOWNERS      @jaggitadmin
+/package.json            @jaggitadmin
+/pnpm-lock.yaml          @jaggitadmin
+/pnpm-workspace.yaml     @jaggitadmin
+/tools/oxlint/           @jaggitadmin

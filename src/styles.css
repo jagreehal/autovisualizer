@@ -1,0 +1,166 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "@xyflow/react/dist/style.css";
+@import "@fontsource-variable/inter";
+@import "@fontsource-variable/jetbrains-mono";
+
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * Two layers of tokens: shadcn's UI tokens, and statechart tokens (--sc-*) for the
+ * canvas. Light matches a paper-like canvas; dark matches an editor at night.
+ */
+:root {
+  --radius: 0.5rem;
+  --background: #ffffff;
+  --foreground: #0f1115;
+  --card: #ffffff;
+  --card-foreground: #0f1115;
+  --popover: #ffffff;
+  --popover-foreground: #0f1115;
+  --primary: #2563eb;
+  --primary-foreground: #ffffff;
+  --secondary: #f4f4f5;
+  --secondary-foreground: #18181b;
+  --muted: #f4f4f5;
+  --muted-foreground: #6b7079;
+  --accent: #f0f1f3;
+  --accent-foreground: #18181b;
+  --destructive: #dc2626;
+  --border: #e4e5e8;
+  --input: #dcdee2;
+  --ring: #93b4f5;
+
+  --sc-canvas: #f4f4f5;
+  --sc-grid: #e6e6e9;
+  --sc-node: #eceef1;
+  --sc-node-fg: #111318;
+  --sc-node-border: #8d949d;
+  --sc-parent: #f7f7f8;
+  --sc-pill: #f6f7f9;
+  --sc-pill-fg: #1d2026;
+  --sc-edge: #8d949d;
+  --sc-active: #2563eb;
+  --sc-active-fill: #dbe6f8;
+  --sc-active-halo: #c3d5f3;
+  --sc-final-fill: #dcf3d1;
+  --sc-final-border: #6dbf4f;
+  --sc-final-fg: #1c4710;
+  --sc-warn: #8a5b13;
+  --sc-warn-fill: #fbefb3;
+  --sc-warn-border: #d8b23b;
+  --sc-inferred: #b7791f;
+  --sc-status: #6b7079;
+}
+
+.dark {
+  --background: #1b1c20;
+  --foreground: #e6e7ea;
+  --card: #1f2024;
+  --card-foreground: #e6e7ea;
+  --popover: #222328;
+  --popover-foreground: #e6e7ea;
+  --primary: #2f6fe4;
+  --primary-foreground: #ffffff;
+  --secondary: #26272c;
+  --secondary-foreground: #e6e7ea;
+  --muted: #26272c;
+  --muted-foreground: #9396a0;
+  --accent: #2b2d33;
+  --accent-foreground: #e6e7ea;
+  --destructive: #f87171;
+  --border: #2c2e34;
+  --input: #34363d;
+  --ring: #4c82e8;
+
+  --sc-canvas: #16171b;
+  --sc-grid: #1f2025;
+  --sc-node: #2b2d33;
+  --sc-node-fg: #e4e6ea;
+  --sc-node-border: #4b4e57;
+  --sc-parent: #1b1c21;
+  --sc-pill: #1e1f24;
+  --sc-pill-fg: #d7d9de;
+  --sc-edge: #676b74;
+  --sc-active: #5b9cf5;
+  --sc-active-fill: #1f3354;
+  --sc-active-halo: #253f6b;
+  --sc-final-fill: #1d3519;
+  --sc-final-border: #4f9a37;
+  --sc-final-fg: #b8e8a4;
+  --sc-warn: #f3c969;
+  --sc-warn-fill: #3a3115;
+  --sc-warn-border: #a3832a;
+  --sc-inferred: #d9a441;
+  --sc-status: #80838c;
+}
+
+@theme inline {
+  --font-sans: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono Variable", ui-monospace, monospace;
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --color-sc-canvas: var(--sc-canvas);
+  --color-sc-node: var(--sc-node);
+  --color-sc-node-fg: var(--sc-node-fg);
+  --color-sc-node-border: var(--sc-node-border);
+  --color-sc-parent: var(--sc-parent);
+  --color-sc-pill: var(--sc-pill);
+  --color-sc-pill-fg: var(--sc-pill-fg);
+  --color-sc-edge: var(--sc-edge);
+  --color-sc-active: var(--sc-active);
+  --color-sc-active-fill: var(--sc-active-fill);
+  --color-sc-active-halo: var(--sc-active-halo);
+  --color-sc-final-fill: var(--sc-final-fill);
+  --color-sc-final-border: var(--sc-final-border);
+  --color-sc-final-fg: var(--sc-final-fg);
+  --color-sc-warn: var(--sc-warn);
+  --color-sc-warn-fill: var(--sc-warn-fill);
+  --color-sc-warn-border: var(--sc-warn-border);
+  --color-sc-inferred: var(--sc-inferred);
+  --color-sc-status: var(--sc-status);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html,
+  body {
+    @apply h-full bg-background font-sans text-foreground antialiased;
+    font-feature-settings: "cv11", "ss01";
+  }
+}
+
+/* React Flow: let our tokens drive the canvas. */
+.react-flow {
+  --xy-background-color: var(--sc-canvas);
+  --xy-background-pattern-color: var(--sc-grid);
+}
+.react-flow__attribution {
+  background: transparent;
+  opacity: 0.5;
+}
+.react-flow__attribution a {
+  color: var(--sc-status);
+}
