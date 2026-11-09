@@ -7,12 +7,19 @@ import { compressToEncodedURIComponent, decompressFromEncodedURIComponent } from
 const AUTOSAVE_KEY = "autovisualizer:code"
 const HASH_PREFIX = "#code="
 
-/** Code from a share link first, then the last autosave. */
-export function initialCode(fallback: string): string {
+export interface InitialCode {
+  readonly code: string
+  /** True when the code came from a share link: someone else wrote it, so it waits for the user. */
+  readonly fromLink: boolean
+}
+
+/** Code from a share link first, then the last autosave, then `fallback`. */
+export function initialCode(fallback: string): InitialCode {
   const shared = location.hash.startsWith(HASH_PREFIX)
     ? decompressFromEncodedURIComponent(location.hash.slice(HASH_PREFIX.length))
     : null
-  return shared || localStorage.getItem(AUTOSAVE_KEY) || fallback
+  if (shared) return { code: shared, fromLink: true }
+  return { code: localStorage.getItem(AUTOSAVE_KEY) || fallback, fromLink: false }
 }
 
 export function autosave(code: string) {

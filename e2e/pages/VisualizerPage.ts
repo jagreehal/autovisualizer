@@ -30,9 +30,19 @@ export class VisualizerPage {
     await this.assertLoaded()
   }
 
-  /** Open the app on a share link carrying `code`. */
-  async gotoWithCode(code: string) {
+  /** Open the app on a share link carrying `code`, without running it. */
+  async gotoSharedLink(code: string) {
     await this.page.goto(`/#code=${LZString.compressToEncodedURIComponent(code)}`)
+  }
+
+  /** Open a share link carrying `code` and accept running it. */
+  async gotoWithCode(code: string) {
+    await this.gotoSharedLink(code)
+    await this.runSharedCode()
+  }
+
+  async runSharedCode() {
+    await this.page.getByRole("button", { name: "Run this code" }).click()
   }
 
   async assertLoaded() {

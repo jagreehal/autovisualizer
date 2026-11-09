@@ -26,7 +26,7 @@ export default defineConfig({
   timeout: 60_000,
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"], viewport: { width: 1600, height: 1000 } } }],
   webServer: {
-    command: `pnpm build && PORT=${PORT} node .output/server/index.mjs`,
+    command: `pnpm build && PORT=${PORT} node --env-file-if-exists=.env.local .output/server/index.mjs`,
     url: baseURL,
     reuseExistingServer: !process.env.CI,
     timeout: 120_000

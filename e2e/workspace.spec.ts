@@ -10,7 +10,20 @@ test.describe("Workspace", () => {
 
     const fresh = await context.newPage()
     await fresh.goto(link)
+    await fresh.getByRole("button", { name: "Run this code" }).click()
     await expect(fresh.getByRole("status", { name: "Graph summary" })).toContainText("machine: approvalMachine")
+  })
+
+  test("code from a share link waits for the user and is not autosaved", async ({ visualizer, page }) => {
+    await visualizer.gotoSharedLink(`import { createMachine } from "xstate"
+export const linked = createMachine({ id: "linked", initial: "a", states: { a: {} } })`)
+
+    await expect(page.getByRole("alert").filter({ hasText: "This link contains code" })).toBeVisible()
+    await expect(visualizer.summary).toBeHidden()
+    expect(await page.evaluate(() => localStorage.getItem("autovisualizer:code"))).toBeNull()
+
+    await visualizer.runSharedCode()
+    await expect(visualizer.summary).toContainText("machine: linked")
   })
 
   test("code survives a reload through autosave", async ({ visualizer, page }) => {

@@ -5,7 +5,6 @@ import {
   ChevronRightIcon,
   FileCodeIcon,
   FolderIcon,
-  HardDriveIcon,
   PlusIcon,
   SearchIcon
 } from "lucide-react"
@@ -21,6 +20,8 @@ import {
   DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
+
+import { Account } from "./Account"
 
 import type { MachineGraph } from "@/machine/graph"
 
@@ -179,15 +180,7 @@ export function Sidebar({ machines, selected, onSelect, examples, onExample, onN
           </p>
         </Folder>
       </nav>
-      <div className="flex h-14 items-center gap-2.5 border-t px-3">
-        <span className="flex size-8 items-center justify-center rounded-full bg-accent text-muted-foreground">
-          <HardDriveIcon className="size-4" />
-        </span>
-        <div className="flex flex-col leading-tight">
-          <span className="text-sm font-medium">Local workspace</span>
-          <span className="text-xs text-muted-foreground">Saved in this browser</span>
-        </div>
-      </div>
+      <Account />
     </aside>
   )
 }

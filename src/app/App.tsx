@@ -107,7 +107,10 @@ const countStates = (node: MachineGraph["root"]): number =>
 
 export function App() {
   const [theme, toggleTheme] = useTheme()
-  const [code, setCode] = useState(() => initialCode(checkoutExample))
+  const [initial] = useState(() => initialCode(checkoutExample))
+  const [code, setCode] = useState(initial.code)
+  // Code from a share link was written by someone else: show it, run it only on request.
+  const [pendingLink, setPendingLink] = useState(initial.fromLink)
   const [machines, setMachines] = useState<ReadonlyArray<MachineGraph>>([])
   const [selectedMachine, setSelectedMachine] = useState(0)
   const [selectedState, setSelectedState] = useState<string | undefined>()
@@ -129,6 +132,7 @@ export function App() {
 
   const visualize = useCallback(
     async (source: string) => {
+      setPendingLink(false)
       autosave(source)
       const result = await call(MachineWorker.use((worker) => worker.load(source)))
       if (result === undefined) return
@@ -172,8 +176,14 @@ export function App() {
   useEffect(() => {
     if (loaded.current) return
     loaded.current = true
+    // Decided once, at mount: link code waits for "Run this code" instead.
+    if (!pendingLink) void visualize(code)
+  }, [visualize, code, pendingLink])
+
+  const runLinkCode = () => {
+    setPendingLink(false)
     void visualize(code)
-  }, [visualize, code])
+  }
 
   const updateCode = (next: string) => {
     setCode(next)
@@ -447,6 +457,20 @@ export function App() {
                         trail={trail}
                         onReset={() => void start(selectedMachine, inputJson)}
                       />
+                    ) : pendingLink ? (
+                      <div
+                        role="alert"
+                        className="m-6 flex max-w-md flex-col gap-3 rounded-lg border bg-background p-4"
+                      >
+                        <p className="font-medium">This link contains code</p>
+                        <p className="text-sm text-muted-foreground">
+                          Someone else wrote it. Read it in the Code panel first: running it executes it in your
+                          browser.
+                        </p>
+                        <Button size="sm" className="self-start" onClick={runLinkCode}>
+                          <PlayIcon /> Run this code
+                        </Button>
+                      </div>
                     ) : (
                       <p className="p-6 text-sm text-muted-foreground">Write a machine and press Visualize.</p>
                     )}

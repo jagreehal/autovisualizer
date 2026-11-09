@@ -31,6 +31,17 @@ pnpm quality    # types, oxlint, oxfmt, unit tests, build, e2e
 
 The stack is TanStack Start with Nitro, the same as money-transfer-effect. The app runs in the browser today; the server half is where accounts and remote saves will go.
 
+## Accounts and database (Neon)
+
+`neon.ts` declares the Neon services: Postgres and Neon Auth (Managed Better Auth). `.neon` links the project and branch, and `neon deploy` applies `neon.ts` and writes the connection variables to `.env.local` (see `.env.example`).
+
+- The browser signs in with `@neon/auth` against the branch's Auth URL. `vite.config.ts` passes `NEON_AUTH_BASE_URL` to the client, so you keep one copy of it.
+- `GET /api/health` runs a query through `pg` on the pooled `DATABASE_URL`. On Vercel, `attachDatabasePool` closes idle clients before an instance suspends.
+- `GET /api/me` checks the user's Neon Auth JWT against the JWKS (issuer and audience) and reads the user from `neon_auth.user`. A request without a valid token gets a 401.
+- Without the Neon variables (CI, forks), the app runs local-only and hides sign-in.
+
+`pnpm start` runs the production build with `.env.local` loaded.
+
 ## Tests
 
 `src/machine/machine.test.ts` covers evaluation, graph extraction, simulation and the MachineJSON round trip with Vitest.
