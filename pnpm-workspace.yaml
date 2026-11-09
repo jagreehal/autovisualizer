@@ -1,2 +1,6 @@
 allowBuilds:
   esbuild: true
+
+# Supply-chain policy: only install versions published at least a day ago (minutes).
+# Vercel's pnpm enforces this default; declaring it here makes local installs match.
+minimumReleaseAge: 1440
