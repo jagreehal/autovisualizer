@@ -72,8 +72,23 @@ const RUN_GRACE = "1 second"
 
 const AsyncFunction = Object.getPrototypeOf(async () => {}).constructor
 
-/** Compile and run `code`; succeed with every machine it created, in creation order. */
-export const evaluate = (code: string) =>
+/**
+ * A module that is anything you ask of it: every property, call and `new` gives back the
+ * stand-in. Lets a repository's machine file import its own actions, actors and helpers.
+ */
+const standInHandler: ProxyHandler<() => void> = {
+  get: (_, key) => (key === "then" ? undefined : key === Symbol.toPrimitive ? () => "" : standIn),
+  apply: () => standIn,
+  construct: () => standIn
+}
+const standIn = new Proxy(function () {}, standInHandler)
+
+/**
+ * Compile and run `code`; succeed with every machine it created, in creation order.
+ * `standIns` replaces imports other than xstate, @xstate/effect and effect with a stand-in
+ * instead of failing: drawing needs the machine's shape, not what its actions do.
+ */
+export const evaluate = (code: string, { standIns = false } = {}) =>
   Effect.gen(function* () {
     const compiled = yield* compile(code)
     const machines: Array<AnyStateMachine> = []
@@ -88,7 +103,7 @@ export const evaluate = (code: string) =>
       ["effect", EffectModule]
     ])
     const require = (name: string) => {
-      const module = modules.get(name)
+      const module = modules.get(name) ?? (standIns ? standIn : undefined)
       if (module === undefined)
         throw new Error(`Cannot import "${name}" here; available: ${[...modules.keys()].join(", ")}`)
       return module

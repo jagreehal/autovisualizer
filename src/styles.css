@@ -1,103 +1,123 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "@xyflow/react/dist/style.css";
-@import "@fontsource-variable/inter";
-@import "@fontsource-variable/jetbrains-mono";
 
 @custom-variant dark (&:is(.dark *));
 
 /*
- * Two layers of tokens: shadcn's UI tokens, and statechart tokens (--sc-*) for the
- * canvas. Light matches a paper-like canvas; dark matches an editor at night.
+ * Two layers of tokens: shadcn's UI tokens (a neutral theme), and statechart tokens
+ * (--sc-*) for the canvas: a grey grid, flat states, slate edges and grey pills.
  */
-:root {
+:root,
+:host {
   --radius: 0.5rem;
-  --background: #ffffff;
-  --foreground: #0f1115;
-  --card: #ffffff;
-  --card-foreground: #0f1115;
-  --popover: #ffffff;
-  --popover-foreground: #0f1115;
-  --primary: #2563eb;
-  --primary-foreground: #ffffff;
-  --secondary: #f4f4f5;
-  --secondary-foreground: #18181b;
-  --muted: #f4f4f5;
-  --muted-foreground: #6b7079;
-  --accent: #f0f1f3;
-  --accent-foreground: #18181b;
-  --destructive: #dc2626;
-  --border: #e4e5e8;
-  --input: #dcdee2;
-  --ring: #93b4f5;
+  --background: oklch(0.99 0 0);
+  --foreground: oklch(0 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0 0 0);
+  --popover: oklch(0.99 0 0);
+  --popover-foreground: oklch(0 0 0);
+  --primary: oklch(0 0 0);
+  --primary-foreground: oklch(1 0 0);
+  --secondary: oklch(0.94 0 0);
+  --secondary-foreground: oklch(0 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.44 0 0);
+  --accent: oklch(0.94 0 0);
+  --accent-foreground: oklch(0 0 0);
+  --destructive: oklch(0.63 0.19 23.03);
+  --destructive-foreground: oklch(1 0 0);
+  --border: oklch(0.92 0 0);
+  --input: oklch(0.94 0 0);
+  --ring: oklch(0 0 0);
 
-  --sc-canvas: #f4f4f5;
-  --sc-grid: #e6e6e9;
-  --sc-node: #eceef1;
-  --sc-node-fg: #111318;
-  --sc-node-border: #8d949d;
-  --sc-parent: #f7f7f8;
-  --sc-pill: #f6f7f9;
-  --sc-pill-fg: #1d2026;
-  --sc-edge: #8d949d;
-  --sc-active: #2563eb;
-  --sc-active-fill: #dbe6f8;
-  --sc-active-halo: #c3d5f3;
-  --sc-final-fill: #dcf3d1;
-  --sc-final-border: #6dbf4f;
-  --sc-final-fg: #1c4710;
-  --sc-warn: #8a5b13;
-  --sc-warn-fill: #fbefb3;
-  --sc-warn-border: #d8b23b;
+  --shadow-xs: 0px 1px 2px 0px hsl(0 0% 0% / 0.09);
+  --shadow-sm: 0px 1px 2px 0px hsl(0 0% 0% / 0.18), 0px 1px 2px -1px hsl(0 0% 0% / 0.18);
+  --shadow-md: 0px 1px 2px 0px hsl(0 0% 0% / 0.18), 0px 2px 4px -1px hsl(0 0% 0% / 0.18);
+  --shadow-lg: 0px 1px 2px 0px hsl(0 0% 0% / 0.18), 0px 4px 6px -1px hsl(0 0% 0% / 0.18);
+
+  /* Flat fills, 2px slate strokes, one blue. */
+  --sc-canvas: #eff1f3;
+  --sc-grid: #e6e9ec;
+  --sc-node: #dfe3e7;
+  --sc-node-fg: #15151d;
+  --sc-node-border: #72758b;
+  --sc-parent: #eff1f3;
+  --sc-parent-border: #c9ced6;
+  --sc-parent-header: #f7f8f9;
+  --sc-header: #dfe3e7;
+  --sc-pill: #f4f5f7;
+  --sc-pill-fg: #15151d;
+  --sc-edge: #72758b;
+  /* Drawn under every edge so lines stay crisp where they cross the grid. */
+  --sc-casing: #fdfdfe;
+  --sc-active: #005cde;
+  --sc-active-fill: #dbe8fb;
+  --sc-final-fill: #c9edbc;
+  --sc-final-border: #54b559;
+  --sc-final-fg: #0c2612;
+  --sc-warn: #905900;
+  --sc-warn-fill: #fde283;
+  --sc-warn-border: #da931e;
+  --sc-warn-fg: #2e1e00;
   --sc-inferred: #b7791f;
-  --sc-status: #6b7079;
+  --sc-status: #5d6072;
 }
 
 .dark {
-  --background: #1b1c20;
-  --foreground: #e6e7ea;
-  --card: #1f2024;
-  --card-foreground: #e6e7ea;
-  --popover: #222328;
-  --popover-foreground: #e6e7ea;
-  --primary: #2f6fe4;
-  --primary-foreground: #ffffff;
-  --secondary: #26272c;
-  --secondary-foreground: #e6e7ea;
-  --muted: #26272c;
-  --muted-foreground: #9396a0;
-  --accent: #2b2d33;
-  --accent-foreground: #e6e7ea;
-  --destructive: #f87171;
-  --border: #2c2e34;
-  --input: #34363d;
-  --ring: #4c82e8;
+  --background: oklch(0 0 0);
+  --foreground: oklch(1 0 0);
+  --card: oklch(0.14 0 0);
+  --card-foreground: oklch(1 0 0);
+  --popover: oklch(0.18 0 0);
+  --popover-foreground: oklch(1 0 0);
+  --primary: oklch(1 0 0);
+  --primary-foreground: oklch(0 0 0);
+  --secondary: oklch(0.25 0 0);
+  --secondary-foreground: oklch(1 0 0);
+  --muted: oklch(0.23 0 0);
+  --muted-foreground: oklch(0.72 0 0);
+  --accent: oklch(0.32 0 0);
+  --accent-foreground: oklch(1 0 0);
+  --destructive: oklch(0.69 0.2 23.91);
+  --destructive-foreground: oklch(0 0 0);
+  --border: oklch(0.26 0 0);
+  --input: oklch(0.32 0 0);
+  --ring: oklch(0.72 0 0);
 
-  --sc-canvas: #16171b;
-  --sc-grid: #1f2025;
-  --sc-node: #2b2d33;
-  --sc-node-fg: #e4e6ea;
-  --sc-node-border: #4b4e57;
-  --sc-parent: #1b1c21;
-  --sc-pill: #1e1f24;
-  --sc-pill-fg: #d7d9de;
-  --sc-edge: #676b74;
-  --sc-active: #5b9cf5;
-  --sc-active-fill: #1f3354;
-  --sc-active-halo: #253f6b;
-  --sc-final-fill: #1d3519;
-  --sc-final-border: #4f9a37;
-  --sc-final-fg: #b8e8a4;
-  --sc-warn: #f3c969;
-  --sc-warn-fill: #3a3115;
-  --sc-warn-border: #a3832a;
+  --sc-canvas: #15151d;
+  --sc-grid: #1c1c26;
+  --sc-node: #2e2f3c;
+  --sc-node-fg: #f5f7f7;
+  --sc-node-border: #72758b;
+  --sc-parent: #18181f;
+  --sc-parent-border: #34353f;
+  --sc-parent-header: #23242e;
+  --sc-header: #2e2f3c;
+  --sc-pill: #1f2029;
+  --sc-pill-fg: #f5f7f7;
+  --sc-edge: #72758b;
+  --sc-casing: #15151d;
+  --sc-active: #63a3fc;
+  --sc-active-fill: #13284a;
+  --sc-final-fill: #14371c;
+  --sc-final-border: #2f7a3d;
+  --sc-final-fg: #c9edbc;
+  --sc-warn: #f8b632;
+  --sc-warn-fill: #432b00;
+  --sc-warn-border: #8a5a00;
+  --sc-warn-fg: #fde283;
   --sc-inferred: #d9a441;
-  --sc-status: #80838c;
+  --sc-status: #9a9db0;
 }
 
 @theme inline {
-  --font-sans: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
-  --font-mono: "JetBrains Mono Variable", ui-monospace, monospace;
+  --font-sans: "Geist Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Geist Mono Variable", ui-monospace, monospace;
+  --shadow-xs: var(--shadow-xs);
+  --shadow-sm: var(--shadow-sm);
+  --shadow-md: var(--shadow-md);
+  --shadow-lg: var(--shadow-lg);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -116,6 +136,7 @@
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
@@ -124,19 +145,23 @@
   --color-sc-node: var(--sc-node);
   --color-sc-node-fg: var(--sc-node-fg);
   --color-sc-node-border: var(--sc-node-border);
+  --color-sc-parent-border: var(--sc-parent-border);
+  --color-sc-header: var(--sc-header);
+  --color-sc-parent-header: var(--sc-parent-header);
+  --color-sc-casing: var(--sc-casing);
   --color-sc-parent: var(--sc-parent);
   --color-sc-pill: var(--sc-pill);
   --color-sc-pill-fg: var(--sc-pill-fg);
   --color-sc-edge: var(--sc-edge);
   --color-sc-active: var(--sc-active);
   --color-sc-active-fill: var(--sc-active-fill);
-  --color-sc-active-halo: var(--sc-active-halo);
   --color-sc-final-fill: var(--sc-final-fill);
   --color-sc-final-border: var(--sc-final-border);
   --color-sc-final-fg: var(--sc-final-fg);
   --color-sc-warn: var(--sc-warn);
   --color-sc-warn-fill: var(--sc-warn-fill);
   --color-sc-warn-border: var(--sc-warn-border);
+  --color-sc-warn-fg: var(--sc-warn-fg);
   --color-sc-inferred: var(--sc-inferred);
   --color-sc-status: var(--sc-status);
 }
@@ -148,7 +173,6 @@
   html,
   body {
     @apply h-full bg-background font-sans text-foreground antialiased;
-    font-feature-settings: "cv11", "ss01";
   }
 }
 
@@ -157,10 +181,25 @@
   --xy-background-color: var(--sc-canvas);
   --xy-background-pattern-color: var(--sc-grid);
 }
+/* Edges of nested states get lifted above the label layer; pills sit on their lines, so lift them higher. */
+.react-flow__edgelabel-renderer {
+  z-index: 1000;
+}
 .react-flow__attribution {
   background: transparent;
   opacity: 0.5;
 }
 .react-flow__attribution a {
   color: var(--sc-status);
+}
+
+/* The pan tool: a hand over the empty canvas. */
+[data-tool="pan"] .react-flow__pane {
+  cursor: grab;
+}
+
+/* In an embed, a vertical swipe scrolls the page; two fingers still pan and zoom the chart.
+   No pointer query: touch laptops report a fine pointer, and a mouse ignores touch-action. */
+[data-compact] .react-flow__pane {
+  touch-action: pan-y !important;
 }

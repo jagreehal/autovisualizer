@@ -3,6 +3,9 @@
  * edges. Nodes keep parent-relative positions so React Flow can nest them; edges
  * come back in root coordinates, routed orthogonally, and are drawn as ELK placed them.
  */
+import { FONT, SIZE, placePills } from "./geometry"
+
+import type { Rect } from "./geometry"
 import ELK from "elkjs/lib/elk.bundled.js"
 
 import { unreachableStates } from "@/machine/graph"
@@ -15,6 +18,8 @@ export interface Point {
   readonly x: number
   readonly y: number
 }
+
+export { FONT, SIZE }
 
 export type Direction = "RIGHT" | "DOWN"
 
@@ -48,28 +53,6 @@ const elk = new ELK()
 /** React Flow ids must be non-empty; v6 gives an id-less machine root the id "". */
 export const flowId = (stateId: string) => `s:${stateId}`
 
-/** Sizes shared with the components that draw them. */
-export const SIZE = {
-  leafHeight: 40,
-  leafPadX: 16,
-  headerHeight: 42,
-  chipHeight: 22,
-  chipGap: 6,
-  pillHeight: 24,
-  pillPadX: 10,
-  diamond: 16,
-  kindIcon: 12,
-  finalIcon: 18,
-  regionPad: 24
-} as const
-
-export const FONT = {
-  state: "600 15px 'Inter Variable'",
-  parent: "600 14px 'Inter Variable'",
-  pill: "600 11px 'Inter Variable'",
-  chip: "500 11px 'JetBrains Mono Variable'"
-} as const
-
 const context = document.createElement("canvas").getContext("2d")
 function textWidth(text: string, font: string): number {
   if (context === null) return text.length * 8
@@ -77,13 +60,13 @@ function textWidth(text: string, font: string): number {
   return Math.ceil(context.measureText(text).width)
 }
 
-const chipWidth = (src: string) => textWidth(`invoke ${src}`, FONT.chip) + 34
+const chipWidth = (src: string) => textWidth(`invoke ${src}`, FONT.chip) + 38
 
 function leafSize(state: StateGraphNode) {
   const icon = state.kind === "final" ? SIZE.finalIcon + 8 : 0
   const chips = state.invokes.length * (SIZE.chipHeight + SIZE.chipGap)
   return {
-    // +6: both 1.5px borders plus a little slack for sub-pixel rounding.
+    // +6: both 2px borders plus a little slack for sub-pixel rounding.
     width: Math.max(
       72,
       textWidth(state.key, FONT.state) + icon + SIZE.leafPadX * 2 + 6,
@@ -98,10 +81,12 @@ interface Placement {
   readonly direction: Direction
   readonly isRoot: boolean
   readonly isInitial: boolean
+  /** False when the machine's box has no title bar (compact embeds). */
+  readonly rootHeader: boolean
 }
 
 function toElkNode(state: StateGraphNode, placement: Placement): ElkNode {
-  const { machineId, direction, isRoot, isInitial } = placement
+  const { machineId, direction, isRoot, isInitial, rootHeader } = placement
   // The initial state goes in the first layer, so the chart reads from where it starts.
   const layer: Record<string, string> = {}
   if (isInitial) layer["elk.layered.layering.layerConstraint"] = "FIRST"
@@ -110,18 +95,19 @@ function toElkNode(state: StateGraphNode, placement: Placement): ElkNode {
   // Chevron + padding, plus the MACHINE / PARALLEL tags drawn after the name.
   const tags = (isRoot ? 1 : 0) + (state.kind === "parallel" ? 1 : 0)
   const header = textWidth(state.key || machineId, FONT.parent) + 56 + tags * 72
+  const headerHeight = isRoot && !rootHeader ? 0 : SIZE.headerHeight
   return {
     id: flowId(state.id),
     layoutOptions: {
-      "elk.padding": `[top=${SIZE.headerHeight + chips + SIZE.regionPad},left=${SIZE.regionPad},bottom=${SIZE.regionPad},right=${SIZE.regionPad}]`,
+      "elk.padding": `[top=${headerHeight + chips + SIZE.regionPad},left=${SIZE.regionPad},bottom=${SIZE.regionPad},right=${SIZE.regionPad}]`,
       "elk.nodeSize.constraints": "MINIMUM_SIZE",
-      "elk.nodeSize.minimum": `(${header}, ${SIZE.headerHeight + 40})`,
+      "elk.nodeSize.minimum": `(${headerHeight > 0 ? header : 0}, ${headerHeight + 40})`,
       // Parallel regions stack across the flow; everything else follows it.
       "elk.direction": state.kind === "parallel" ? (direction === "RIGHT" ? "DOWN" : "RIGHT") : direction,
       ...layer
     },
     children: state.children.map((child) =>
-      toElkNode(child, { machineId, direction, isRoot: false, isInitial: state.initial === child.id })
+      toElkNode(child, { machineId, direction, isRoot: false, isInitial: state.initial === child.id, rootHeader })
     )
   }
 }
@@ -134,9 +120,9 @@ const pillIconWidth = (edge: StateGraphEdge) =>
       ? SIZE.kindIcon + 6
       : 0
 
-// +4: both 1.5px borders.
+// +6: both 2px borders plus a little slack for sub-pixel rounding.
 const pillWidth = (edge: StateGraphEdge) =>
-  textWidth(edge.label, FONT.pill) + SIZE.pillPadX * 2 + pillIconWidth(edge) + 4
+  textWidth(edge.label, FONT.pill) + SIZE.pillPadX * 2 + pillIconWidth(edge) + 6
 
 function toElkEdge(edge: StateGraphEdge): ElkExtendedEdge {
   return {
@@ -151,7 +137,8 @@ function indexStates(state: StateGraphNode): Array<readonly [string, StateGraphN
   return [[flowId(state.id), state], ...state.children.flatMap(indexStates)]
 }
 
-export async function layout(graph: MachineGraph, direction: Direction): Promise<Laidout> {
+/** `rootHeader` false leaves out the machine's title bar, for compact embeds. */
+export async function layout(graph: MachineGraph, direction: Direction, rootHeader = true): Promise<Laidout> {
   // Measure with the real fonts: load them explicitly, since nothing on the page may use them yet.
   await Promise.all(Object.values(FONT).map((font) => document.fonts.load(font)))
   const result = await elk.layout({
@@ -163,19 +150,19 @@ export async function layout(graph: MachineGraph, direction: Direction): Promise
       "elk.json.edgeCoords": "ROOT",
       "elk.edgeRouting": "ORTHOGONAL",
       "elk.edgeLabels.inline": "true",
-      "elk.layered.spacing.nodeNodeBetweenLayers": "56",
-      "elk.layered.spacing.edgeNodeBetweenLayers": "20",
-      "elk.layered.spacing.edgeEdgeBetweenLayers": "14",
-      "elk.spacing.nodeNode": "40",
-      "elk.spacing.edgeNode": "22",
-      "elk.spacing.edgeEdge": "14",
-      "elk.spacing.edgeLabel": "6",
+      "elk.layered.spacing.nodeNodeBetweenLayers": "64",
+      "elk.layered.spacing.edgeNodeBetweenLayers": "24",
+      "elk.layered.spacing.edgeEdgeBetweenLayers": "18",
+      "elk.spacing.nodeNode": "48",
+      "elk.spacing.edgeNode": "26",
+      "elk.spacing.edgeEdge": "18",
+      "elk.spacing.edgeLabel": "8",
       "elk.layered.nodePlacement.strategy": "BRANDES_KOEPF",
       "elk.layered.considerModelOrder.strategy": "NODES_AND_EDGES",
       // Break cycles in authoring order so the flow starts at the initial state.
       "elk.layered.cycleBreaking.strategy": "MODEL_ORDER"
     },
-    children: [toElkNode(graph.root, { machineId: graph.id, direction, isRoot: true, isInitial: false })],
+    children: [toElkNode(graph.root, { machineId: graph.id, direction, isRoot: true, isInitial: false, rootHeader })],
     edges: graph.edges.map(toElkEdge)
   })
 
@@ -211,26 +198,44 @@ export async function layout(graph: MachineGraph, direction: Direction): Promise
     return [node, ...(elkNode.children ?? []).flatMap((child) => flatten(child, elkNode.id))]
   }
 
+  // What pills must not cover, in root coordinates (the frame edges and pills are drawn in).
+  const leaves = (elkNode: ElkNode, offset: Point, isTop: boolean): Array<Rect> => {
+    const at = { x: offset.x + (elkNode.x ?? 0), y: offset.y + (elkNode.y ?? 0) }
+    const children = elkNode.children ?? []
+    // A parent blocks only its header; its body is where its children's edges and pills go.
+    if (children.length > 0)
+      return [
+        ...(isTop && !rootHeader ? [] : [{ ...at, width: elkNode.width ?? 0, height: SIZE.headerHeight }]),
+        ...children.flatMap((child) => leaves(child, at, false))
+      ]
+    return [{ ...at, width: elkNode.width ?? 0, height: elkNode.height ?? 0 }]
+  }
+
   const byId = new Map(graph.edges.map((edge) => [edge.id, edge]))
-  const edges = (result.edges ?? []).flatMap((elkEdge): Array<TransitionFlowEdge> => {
+  const routed = (result.edges ?? []).flatMap((elkEdge) => {
     const edge = byId.get(elkEdge.id)
     const section = elkEdge.sections?.[0]
     const label = elkEdge.labels?.[0]
     if (edge === undefined || section === undefined) return []
     return [
       {
-        id: edge.id,
-        type: "transition",
-        source: flowId(edge.source),
-        target: flowId(edge.target),
-        selectable: false,
-        data: {
-          edge,
-          points: [section.startPoint, ...(section.bendPoints ?? []), section.endPoint],
-          label: { x: label?.x ?? 0, y: label?.y ?? 0, width: label?.width ?? 0, height: label?.height ?? 0 }
-        }
+        edge,
+        points: [section.startPoint, ...(section.bendPoints ?? []), section.endPoint],
+        label: { x: label?.x ?? 0, y: label?.y ?? 0, width: label?.width ?? 0, height: label?.height ?? 0 }
       }
     ]
   })
+  const pills = placePills(
+    routed,
+    (result.children ?? []).flatMap((child) => leaves(child, { x: 0, y: 0 }, true))
+  )
+  const edges = routed.map(({ edge, points }, i): TransitionFlowEdge => ({
+    id: edge.id,
+    type: "transition",
+    source: flowId(edge.source),
+    target: flowId(edge.target),
+    selectable: false,
+    data: { edge, points, label: pills[i] ?? { x: 0, y: 0, width: 0, height: 0 } }
+  }))
   return { nodes: (result.children ?? []).flatMap((child) => flatten(child, undefined)), edges }
 }

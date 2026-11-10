@@ -143,8 +143,8 @@ function slotFor(stateJson: Json | undefined, source: AnyStateNode, transition: 
 
 const LITERAL_TARGET = /\btarget\s*:\s*(["'`])([^"'`$]+)\1/g
 
-// ponytail: regex over the transition function's source text, so it misses targets built
-// from variables or helpers; swap for effect-analyzer's AST extraction when that matters.
+// Reads literal targets from the transition function's source text. A target built from a
+// variable or helper is listed in `unresolved` instead.
 const literalTargets = (sources: ReadonlyArray<string>): Array<string> =>
   sources.flatMap((source) => [...source.matchAll(LITERAL_TARGET)].flatMap((match) => (match[2] ? [match[2]] : [])))
 

@@ -18,11 +18,11 @@ const defineThemes: BeforeMount = (monaco) => {
     inherit: true,
     rules: [],
     colors: {
-      "editor.background": "#1b1c20",
-      "editorGutter.background": "#1b1c20",
-      "editor.lineHighlightBackground": "#22232899",
-      "editorLineNumber.foreground": "#4b4e57",
-      "editorLineNumber.activeForeground": "#9396a0"
+      "editor.background": "#000000",
+      "editorGutter.background": "#000000",
+      "editor.lineHighlightBackground": "#16161699",
+      "editorLineNumber.foreground": "#4d4d4d",
+      "editorLineNumber.activeForeground": "#a1a1a1"
     }
   })
   monaco.editor.defineTheme("viz-light", {
@@ -30,9 +30,9 @@ const defineThemes: BeforeMount = (monaco) => {
     inherit: true,
     rules: [],
     colors: {
-      "editor.background": "#ffffff",
-      "editor.lineHighlightBackground": "#f4f4f5",
-      "editorLineNumber.foreground": "#b4b8bf"
+      "editor.background": "#fcfcfc",
+      "editor.lineHighlightBackground": "#f2f2f2",
+      "editorLineNumber.foreground": "#a8a8a8"
     }
   })
   // Imports resolve in the worker, not in Monaco, so only report syntax errors.
@@ -58,7 +58,7 @@ export function Editor({ code, theme, onChange, onRun }: EditorProps) {
       options={{
         minimap: { enabled: false },
         fontSize: 13,
-        fontFamily: "'JetBrains Mono Variable', ui-monospace, monospace",
+        fontFamily: "'Geist Mono Variable', ui-monospace, monospace",
         fontLigatures: true,
         lineHeight: 20,
         padding: { top: 12 },

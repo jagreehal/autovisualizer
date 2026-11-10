@@ -31,7 +31,8 @@
     {
       "name": "anti-slop-effect",
       "specifier": "./tools/oxlint/anti-slop/effect/index.ts"
-    }
+    },
+    "@shadcn/lint"
   ],
   "rules": {
     "anti-slop/no-chained-type-assertions": "error",
@@ -49,6 +50,17 @@
     "anti-slop/no-unsafe-dictionary-type": "error",
     "anti-slop/no-widen-then-assert": "error",
     "anti-slop/require-safety-comment-for-type-assertion": "error",
-    "anti-slop-effect/no-service-constructor-imports": "error"
+    "anti-slop-effect/no-service-constructor-imports": "error",
+    "shadcn/no-raw-colors": "error",
+    "shadcn/no-unknown-classes": [
+      "error",
+      {
+        "allow": [
+          "nodrag",
+          "nopan"
+        ]
+      }
+    ],
+    "shadcn/require-static-classes": "error"
   }
 }

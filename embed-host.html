@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="autoviz-fences" content="on" />
+    <title>Statechart embed host</title>
+    <!-- Docs-site styles that must stay outside the charts -->
+    <style>
+      body { font-family: Georgia, serif; background: #fdf6e3; margin: 0 auto; padding: 24px; max-width: 960px; }
+      h2 { color: crimson; }
+      button { background: hotpink !important; border-radius: 0; }
+      div { outline: 1px dashed orange; }
+      #walk { height: 560px; }
+    </style>
+    <!-- ?from=http://other-origin:port loads the embed cross-origin, as a real docs site would -->
+    <script type="module">
+      const from = new URLSearchParams(location.search).get("from") ?? ".";
+      import(`${from}/public/embed/embed.js`);
+    </script>
+  </head>
+  <body>
+    <h2>Source inside the tag</h2>
+    <p>Docs prose above the diagram. <button>Host button</button></p>
+    <autoviz-statechart theme="auto">
+      <script type="text/typescript">
+        import { createMachine } from "xstate"
+        // Raw text: <generics> and && survive.
+        export const light = createMachine({
+          id: "light",
+          initial: "green",
+          states: {
+            green: { on: { TIMER: { target: "yellow" } } },
+            yellow: { on: { TIMER: { target: "red" } } },
+            red: { on: { TIMER: { target: "green" } } }
+          }
+        })
+      </script>
+    </autoviz-statechart>
+
+    <h2>A Markdown fence, as markdown-it renders ```statechart</h2>
+    <pre><code class="language-statechart">import { createMachine } from "xstate"
+export const door = createMachine({
+  id: "door",
+  initial: "closed",
+  states: { closed: { on: { OPEN: { target: "open" } } }, open: { on: { CLOSE: { target: "closed" } } } }
+})</code></pre>
+
+    <h2>A walkthrough, starting partway (events), deep-linkable as #walk/2</h2>
+    <autoviz-statechart
+      id="walk"
+      src="src/examples/checkout.ts"
+      events="ADD_ITEM"
+      walkthrough='[{"event":"CHECKOUT","note":"the cart is ready, ask for an address"},{"event":"SUBMIT","note":"take payment"},{"event":"PAID","note":"done"}]'
+    ></autoviz-statechart>
+
+    <h2>Errors in the chart</h2>
+    <autoviz-statechart src="src/examples/checkout.ts" events="PAID" style="height: 80px"></autoviz-statechart>
+    <autoviz-statechart src="src/examples/checkout.ts" machine="nope" style="height: 80px"></autoviz-statechart>
+
+    <h2 style="margin-top: 150vh">Lazy: loads only when scrolled to</h2>
+    <autoviz-statechart id="lazy" src="e2e/fixtures/toggle.machine.json"></autoviz-statechart>
+  </body>
+</html>

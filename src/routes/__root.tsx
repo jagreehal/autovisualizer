@@ -1,5 +1,6 @@
 import { HeadContent, Scripts, createRootRoute } from "@tanstack/react-router"
 
+import fontsCss from "../fonts.css?url"
 import appCss from "../styles.css?url"
 
 export const Route = createRootRoute({
@@ -9,7 +10,10 @@ export const Route = createRootRoute({
       { name: "viewport", content: "width=device-width, initial-scale=1" },
       { title: "Autovisualizer" }
     ],
-    links: [{ rel: "stylesheet", href: appCss }]
+    links: [
+      { rel: "stylesheet", href: fontsCss },
+      { rel: "stylesheet", href: appCss }
+    ]
   }),
   shellComponent: RootDocument
 })

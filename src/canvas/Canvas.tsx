@@ -55,6 +55,7 @@ export interface Simulation {
 interface CanvasState extends Simulation {
   readonly tool: Tool
   readonly selected: string | undefined
+  readonly compact: boolean
 }
 
 const CanvasContext = createContext<CanvasState>({
@@ -62,7 +63,8 @@ const CanvasContext = createContext<CanvasState>({
   enabled: new Set(),
   send: () => {},
   tool: "simulate",
-  selected: undefined
+  selected: undefined,
+  compact: false
 })
 
 interface FlagProps {
@@ -80,7 +82,7 @@ function Flag({ tone, icon, tip }: FlagProps) {
           role="img"
           aria-label={tip}
           className={cn(
-            "absolute -top-2.5 -right-2.5 z-10 flex size-[18px] items-center justify-center rounded-full text-white ring-2 ring-sc-canvas dark:text-black",
+            "absolute -top-3 -right-3 z-10 flex size-5 items-center justify-center rounded-full text-white ring-2 ring-sc-canvas dark:text-black",
             tone === "warn" ? "bg-sc-warn" : "bg-sc-inferred"
           )}
         >
@@ -97,14 +99,14 @@ function InitialMarker() {
   return (
     <svg
       aria-label="initial state"
-      className="absolute -top-[13px] -left-[22px] text-sc-edge"
-      width="24"
-      height="26"
-      viewBox="0 0 24 26"
+      className="absolute -top-[15px] -left-[26px] text-sc-edge"
+      width="28"
+      height="30"
+      viewBox="0 0 28 30"
     >
-      <circle cx="4" cy="4" r="3.5" fill="currentColor" />
-      <path d="M4 8 C4 17 8 20 15 20" fill="none" stroke="currentColor" strokeWidth="1.5" />
-      <path d="M14 16 L20 20 L14 24 z" fill="currentColor" />
+      <circle cx="5" cy="5" r="4.5" fill="currentColor" />
+      <path d="M5 10 C5 20 9 23 17 23" fill="none" stroke="currentColor" strokeWidth="2" />
+      <path d="M16 18.5 L23 23 L16 27.5 z" fill="currentColor" />
     </svg>
   )
 }
@@ -116,9 +118,9 @@ function Chips({ invokes }: { readonly invokes: ReadonlyArray<string> }) {
       {invokes.map((src) => (
         <span
           key={src}
-          className="flex h-[22px] items-center gap-1 rounded-[5px] border border-sc-node-border/50 bg-sc-canvas/60 px-1.5 font-mono text-[11px] text-sc-node-fg/80"
+          className="flex h-6 items-center gap-1.5 rounded-[5px] border border-sc-node-border/40 bg-sc-canvas/70 px-2 font-mono text-xs text-sc-node-fg/85"
         >
-          <WorkflowIcon className="size-3 opacity-70" />
+          <WorkflowIcon className="size-3.5 opacity-70" />
           <span className="opacity-60">invoke</span> {src}
         </span>
       ))}
@@ -127,12 +129,19 @@ function Chips({ invokes }: { readonly invokes: ReadonlyArray<string> }) {
 }
 
 const tag =
-  "shrink-0 rounded-[4px] bg-sc-node px-1.5 py-px text-[10px] font-medium tracking-wide text-sc-node-fg/70 uppercase"
+  "shrink-0 rounded-[4px] bg-sc-canvas px-1.5 py-0.5 text-[11px] font-semibold tracking-wide text-sc-node-fg/70 uppercase"
+
+/** While a simulation runs, what the active states can't reach steps back. */
+const dimmed = "opacity-60"
+// The active ring eases in from the state's edge, so the eye follows a transition to its target.
+const fade =
+  "motion-safe:transition-[opacity,outline-color,outline-width,outline-offset,background-color,scale] motion-safe:duration-150 motion-safe:ease-out"
 
 function StateNodeView({ data }: NodeProps<StateFlowNode>) {
   const { state, machineId, isRoot, isInitial, isRegion, isUnreachable, hasUnresolved } = data
-  const { active, selected } = use(CanvasContext)
+  const { active, selected, compact } = use(CanvasContext)
   const isActive = active.has(state.id)
+  const isDimmed = active.size > 0 && !isActive
   const isSelected = selected === state.id
   const isParent = state.children.length > 0
   const decorations = (
@@ -156,7 +165,8 @@ function StateNodeView({ data }: NodeProps<StateFlowNode>) {
       )}
     </>
   )
-  const ring = isSelected && "ring-2 ring-sc-active ring-offset-2 ring-offset-sc-canvas"
+  // Inspecting is a quieter mark than being active: a dashed outline, never the blue ring.
+  const ring = isSelected && "outline-2 outline-offset-4 outline-dashed outline-sc-node-fg/50"
 
   if (isParent) {
     return (
@@ -165,27 +175,32 @@ function StateNodeView({ data }: NodeProps<StateFlowNode>) {
         aria-label={state.key || machineId}
         aria-current={isActive || undefined}
         className={cn(
-          "relative h-full w-full rounded-[8px] border-[1.5px] border-sc-node-border",
-          isRoot ? "bg-transparent" : "bg-sc-parent/70",
-          isRegion && "border-dashed",
-          isActive && !isRoot && "border-sc-active",
+          "relative h-full w-full rounded-[8px]",
+          fade,
+          isRoot ? "bg-transparent" : "border-[3px] border-sc-parent-border bg-sc-parent/70",
+          isRegion && "border-2 border-dashed",
+          isDimmed && !isRoot && dimmed,
           ring
         )}
       >
         {decorations}
-        <div
-          className={cn(
-            "pointer-events-auto flex items-center gap-1.5 border-b-[1.5px] border-sc-node-border px-3 text-sc-node-fg",
-            isRegion && "border-dashed",
-            isActive && !isRoot && "border-sc-active"
-          )}
-          style={{ height: SIZE.headerHeight }}
-        >
-          <ChevronDownIcon className="size-4 opacity-60" />
-          <span className="truncate text-[14px] font-semibold">{state.key || machineId}</span>
-          {isRoot && <span className={tag}>machine</span>}
-          {state.kind === "parallel" && <span className={tag}>parallel</span>}
-        </div>
+        {!(compact && isRoot) && (
+          <div
+            className={cn(
+              "pointer-events-auto flex items-center gap-2 px-3.5 text-sc-node-fg",
+              // The machine gets a filled title bar, other parents a light header.
+              isRoot
+                ? "rounded-[6px] bg-sc-header"
+                : "rounded-t-[5px] border-b-2 border-sc-parent-border bg-sc-parent-header"
+            )}
+            style={{ height: SIZE.headerHeight }}
+          >
+            <ChevronDownIcon className="size-4 opacity-60" />
+            <span className="truncate text-base font-semibold tracking-tight">{state.key || machineId}</span>
+            {isRoot && <span className={tag}>machine</span>}
+            {state.kind === "parallel" && <span className={tag}>parallel</span>}
+          </div>
+        )}
         {state.invokes.length > 0 && (
           <div className="px-3 pt-2">
             <Chips invokes={state.invokes} />
@@ -196,7 +211,7 @@ function StateNodeView({ data }: NodeProps<StateFlowNode>) {
   }
 
   const tone = isUnreachable
-    ? "border-sc-warn-border bg-sc-warn-fill text-sc-node-fg"
+    ? "border-sc-warn-border bg-sc-warn-fill text-sc-warn-fg"
     : state.kind === "final"
       ? "border-sc-final-border bg-sc-final-fill text-sc-final-fg"
       : "border-sc-node-border bg-sc-node text-sc-node-fg"
@@ -206,17 +221,20 @@ function StateNodeView({ data }: NodeProps<StateFlowNode>) {
       aria-label={state.key}
       aria-current={isActive || undefined}
       className={cn(
-        "relative flex h-full w-full flex-col justify-center gap-1 rounded-[6px] border-[1.5px] transition-[box-shadow,background-color,border-color] duration-200",
+        "relative flex h-full w-full flex-col justify-center gap-1 rounded-[6px] border-2",
+        fade,
         tone,
-        isActive && "border-sc-active bg-sc-active-fill shadow-[0_0_0_4px_var(--sc-active-halo)]",
+        // The active mark: a 4px blue ring standing 2px off the state.
+        isActive && "outline-4 outline-offset-2 outline-sc-active",
+        isDimmed && dimmed,
         ring
       )}
       style={{ paddingInline: SIZE.leafPadX }}
     >
       {decorations}
-      <div className="flex items-center gap-2" style={{ height: state.invokes.length > 0 ? 26 : undefined }}>
-        {state.kind === "final" && <CircleDotIcon className="size-[18px] shrink-0" strokeWidth={2.5} />}
-        <span className="truncate text-[15px] font-semibold tracking-[-0.01em]">{state.key}</span>
+      <div className="flex items-center gap-2" style={{ height: state.invokes.length > 0 ? 30 : undefined }}>
+        {state.kind === "final" && <CircleDotIcon className="size-5 shrink-0" strokeWidth={2.5} />}
+        <span className="truncate text-xl leading-none font-semibold tracking-tight">{state.key}</span>
       </div>
       <Chips invokes={state.invokes} />
     </div>
@@ -250,15 +268,15 @@ const KIND_ICON = { after: ClockIcon, done: CircleCheckIcon, error: CircleXIcon 
 function PillIcon({ edge }: { readonly edge: StateGraphEdge }) {
   if (edge.branch !== undefined) {
     return (
-      <span className="relative flex size-4 items-center justify-center">
-        <span className="absolute inset-[2px] rotate-45 rounded-[2px] bg-current" />
-        <span className="relative text-[9px] font-bold text-sc-pill">{edge.branch}</span>
+      <span className="relative flex size-[18px] items-center justify-center">
+        <span className="absolute inset-[2px] rotate-45 rounded-[3px] bg-current" />
+        <span className="relative text-[10px] font-bold text-sc-pill">{edge.branch}</span>
       </span>
     )
   }
   if (edge.kind === "after" || edge.kind === "done" || edge.kind === "error") {
     const Icon = KIND_ICON[edge.kind]
-    return <Icon className="size-3 opacity-70" strokeWidth={2.5} />
+    return <Icon className="size-3.5 opacity-70" strokeWidth={2.5} />
   }
   return null
 }
@@ -268,22 +286,26 @@ function TransitionEdgeView({ id, data }: EdgeProps<TransitionFlowEdge>) {
   if (data === undefined) return null
   const { edge, points, label } = data
   const live = active.has(edge.source)
+  const isDimmed = active.size > 0 && !live
   const canSend = tool === "simulate" && live && edge.eventJson !== undefined && enabled.has(edge.eventJson)
+  const path = roundedPath(points)
   return (
-    <>
+    <g className={cn(fade, isDimmed && dimmed)}>
+      {/* The casing: a canvas-coloured band under the line, so lines read where they cross. */}
+      <path d={path} fill="none" stroke="var(--sc-casing)" strokeWidth={6} strokeLinejoin="round" />
       <BaseEdge
         id={id}
-        path={roundedPath(points)}
-        markerEnd={live ? "url(#sc-arrow-active)" : "url(#sc-arrow)"}
+        path={path}
+        markerEnd="url(#sc-arrow)"
         style={{
-          stroke: live ? "var(--sc-active)" : "var(--sc-edge)",
-          strokeWidth: 1.5,
-          strokeDasharray: edge.inferred ? "5 4" : undefined
+          stroke: "var(--sc-edge)",
+          strokeWidth: 2,
+          strokeDasharray: edge.inferred ? "6 5" : undefined
         }}
       />
       <EdgeLabelRenderer>
-        {/* No press-scale: `scale` would also scale the translate below and move the pill
-            out from under the pointer between mousedown and mouseup. */}
+        {/* Press feedback uses the `scale` property, which scales the pill in place before the
+            translate below, so the pill stays under the pointer. */}
         <button
           type="button"
           disabled={!canSend}
@@ -291,13 +313,16 @@ function TransitionEdgeView({ id, data }: EdgeProps<TransitionFlowEdge>) {
           onClick={() => edge.eventJson !== undefined && send(edge.eventJson)}
           title={edge.inferred ? "Target read from a transition function" : edge.eventJson}
           className={cn(
-            "nodrag nopan pointer-events-auto absolute flex items-center justify-center gap-1.5 rounded-full border-[1.5px] font-semibold whitespace-nowrap",
-            "border-sc-node-border bg-sc-pill text-[11px] text-sc-pill-fg",
+            "nodrag nopan pointer-events-auto absolute flex items-center justify-center gap-1.5 rounded-full border-2 font-semibold whitespace-nowrap",
+            "bg-sc-pill text-sm",
+            fade,
+            // Dim by colour, not opacity: the pill sits on its line and must hide it.
+            isDimmed ? "border-sc-node-border/55 text-sc-pill-fg/60" : "border-sc-node-border text-sc-pill-fg",
             edge.kind === "always" && "italic",
             edge.inferred && "border-dashed",
-            live && "border-sc-active text-sc-active",
+            // Sendable now: a thin blue line just outside the pill.
             canSend &&
-              "cursor-pointer bg-sc-active-fill transition-[box-shadow,filter] hover:shadow-[0_0_0_3px_var(--sc-active-halo)] active:brightness-95"
+              "cursor-pointer outline-2 outline-offset-0 outline-sc-active hover:bg-sc-active-fill focus-visible:outline-4 active:scale-[0.97]"
           )}
           style={{
             transform: `translate(${label.x}px, ${label.y}px)`,
@@ -310,7 +335,7 @@ function TransitionEdgeView({ id, data }: EdgeProps<TransitionFlowEdge>) {
           {edge.label}
         </button>
       </EdgeLabelRenderer>
-    </>
+    </g>
   )
 }
 
@@ -318,16 +343,21 @@ const nodeTypes = { state: StateNodeView }
 const edgeTypes = { transition: TransitionEdgeView }
 
 function ArrowMarkers() {
-  const marker = (id: string, color: string) => (
-    <marker id={id} viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
-      <path d="M 0 0.5 L 10 5 L 0 9.5 z" fill={color} />
-    </marker>
-  )
+  // Marker units scale with the 2px stroke: 5 units draw a 10px head.
   return (
     <svg className="absolute size-0">
       <defs>
-        {marker("sc-arrow", "var(--sc-edge)")}
-        {marker("sc-arrow-active", "var(--sc-active)")}
+        <marker
+          id="sc-arrow"
+          viewBox="0 0 10 10"
+          refX="9"
+          refY="5"
+          markerWidth="5"
+          markerHeight="5"
+          orient="auto-start-reverse"
+        >
+          <path d="M 0 0.5 L 10 5 L 0 9.5 z" fill="var(--sc-edge)" />
+        </marker>
       </defs>
     </svg>
   )
@@ -335,7 +365,26 @@ function ArrowMarkers() {
 
 const chrome = "flex items-center rounded-lg border bg-background/95 shadow-sm backdrop-blur"
 const iconButton =
-  "flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+  "flex size-8 items-center justify-center rounded-md text-muted-foreground transition-[color,background-color,scale] duration-150 ease-out hover:bg-accent hover:text-foreground active:scale-[0.97]"
+
+// Fill the view, but never under the floating chrome: the breadcrumb above, the toolbars below.
+// Small machines grow up to 150%.
+const FIT = { padding: { top: "72px", bottom: "84px", x: "32px" }, maxZoom: 1.5 } as const
+// Compact has no breadcrumb above.
+const COMPACT_FIT = { ...FIT, padding: { ...FIT.padding, top: "32px" } } as const
+const useFit = () => (use(CanvasContext).compact ? COMPACT_FIT : FIT)
+
+/** Refit when the canvas changes size: a column shown, hidden or dragged. */
+function FitOnResize() {
+  const flow = useReactFlow()
+  const fit = useFit()
+  const width = useStore((store) => store.width)
+  const height = useStore((store) => store.height)
+  useEffect(() => {
+    void flow.fitView(fit)
+  }, [flow, fit, width, height])
+  return null
+}
 
 interface ZoomControlsProps {
   readonly locked: boolean
@@ -344,6 +393,7 @@ interface ZoomControlsProps {
 
 function ZoomControls({ locked, onLock }: ZoomControlsProps) {
   const flow = useReactFlow()
+  const fit = useFit()
   const zoom = useStore((store) => store.transform[2])
   return (
     <div className={cn(chrome, "gap-0.5 p-1")}>
@@ -359,7 +409,7 @@ function ZoomControls({ locked, onLock }: ZoomControlsProps) {
         type="button"
         aria-label="Fit to screen"
         className={iconButton}
-        onClick={() => void flow.fitView({ duration: 250, padding: 0.15, maxZoom: 1.1 })}
+        onClick={() => void flow.fitView({ ...fit, duration: 250 })}
       >
         <MaximizeIcon className="size-4" />
       </button>
@@ -401,7 +451,7 @@ function Tools({ tool, onTool, onReset }: ToolsProps) {
               className={cn(
                 iconButton,
                 "size-9",
-                tool === value && "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground"
+                tool === value && "bg-sc-active-fill text-sc-active hover:bg-sc-active-fill hover:text-sc-active"
               )}
             >
               <Icon className="size-[18px]" />
@@ -466,27 +516,40 @@ export interface CanvasProps {
   /** Breadcrumb trail after the machine: the selected or deepest active state. */
   readonly trail: ReadonlyArray<string>
   readonly onReset: () => void
+  /** For embeds, where the page names the machine: no breadcrumb, and no title bar on the machine. */
+  readonly compact?: boolean
+  /** Top to bottom suits a narrow, portrait container. */
+  readonly initialDirection?: Direction
 }
 
-export function Canvas({ graph, simulation, selected, onSelect, trail, onReset }: CanvasProps) {
-  const [direction, setDirection] = useState<Direction>("RIGHT")
+export function Canvas({
+  graph,
+  simulation,
+  selected,
+  onSelect,
+  trail,
+  onReset,
+  compact = false,
+  initialDirection = "RIGHT"
+}: CanvasProps) {
+  const [direction, setDirection] = useState<Direction>(initialDirection)
   const [tool, setTool] = useState<Tool>("simulate")
   const [locked, setLocked] = useState(false)
   const [laidout, setLaidout] = useState<Laidout | undefined>()
 
   useEffect(() => {
     let cancelled = false
-    void layout(graph, direction).then((result) => {
+    void layout(graph, direction, !compact).then((result) => {
       if (!cancelled) setLaidout(result)
     })
     return () => {
       cancelled = true
     }
-  }, [graph, direction])
+  }, [graph, direction, compact])
 
   if (laidout === undefined) return <div className="h-full bg-sc-canvas" />
   return (
-    <CanvasContext value={{ ...simulation, tool, selected }}>
+    <CanvasContext value={{ ...simulation, tool, selected, compact }}>
       <ArrowMarkers />
       <ReactFlow
         key={`${graph.id}:${direction}`}
@@ -495,42 +558,52 @@ export function Canvas({ graph, simulation, selected, onSelect, trail, onReset }
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         fitView
-        fitViewOptions={{ padding: 0.15, maxZoom: 1.1 }}
+        fitViewOptions={compact ? COMPACT_FIT : FIT}
         minZoom={0.1}
         maxZoom={2.5}
         nodesConnectable={false}
         nodesDraggable={false}
         elementsSelectable={false}
         panOnDrag={!locked && tool !== "select"}
-        panOnScroll={!locked}
+        // In a docs page the wheel and a one-finger swipe scroll the page (styles.css hands vertical
+        // swipes to the browser); two fingers pan and pinch the chart.
+        panOnScroll={!locked && !compact}
+        preventScrolling={!compact}
         zoomOnScroll={false}
         zoomOnPinch={!locked}
         zoomOnDoubleClick={false}
         onNodeClick={(_, node) => onSelect(node.data.state.id)}
         onPaneClick={() => onSelect(undefined)}
-        className={cn(tool === "pan" && "[&_.react-flow__pane]:cursor-grab")}
+        className="@container"
+        onTouchStartCapture={(event) => compact && event.touches.length < 2 && event.stopPropagation()}
+        data-tool={tool}
+        data-compact={compact || undefined}
       >
         <Background variant={BackgroundVariant.Lines} gap={24} lineWidth={1} />
-        <Panel position="top-left" className="!m-3">
-          <nav aria-label="Breadcrumb" className={cn(chrome, "h-9 gap-1 px-3 text-sm")}>
-            <span className="text-muted-foreground">root</span>
-            {[graph.id, ...trail].map((part, i, all) => (
-              <span key={`${i}:${part}`} className="flex items-center gap-1">
-                <ChevronRightIcon className="size-3.5 text-muted-foreground" />
-                <span className={cn(i === all.length - 1 ? "font-medium text-foreground" : "text-muted-foreground")}>
-                  {part}
+        <FitOnResize />
+        {!compact && (
+          <Panel position="top-left" className="!m-3">
+            <nav aria-label="Breadcrumb" className={cn(chrome, "h-9 gap-1 px-3 text-sm")}>
+              <span className="text-muted-foreground">root</span>
+              {[graph.id, ...trail].map((part, i, all) => (
+                <span key={`${i}:${part}`} className="flex items-center gap-1">
+                  <ChevronRightIcon className="size-3.5 text-muted-foreground" />
+                  <span className={cn(i === all.length - 1 ? "font-medium text-foreground" : "text-muted-foreground")}>
+                    {part}
+                  </span>
                 </span>
-              </span>
-            ))}
-          </nav>
-        </Panel>
-        <Panel position="bottom-left" className="!m-3">
+              ))}
+            </nav>
+          </Panel>
+        )}
+        {/* Below 28rem the three toolbars would overlap: keep the tools, pinch or refit for zoom. */}
+        <Panel position="bottom-left" className="!m-3 @max-md:hidden">
           <ZoomControls locked={locked} onLock={() => setLocked((value) => !value)} />
         </Panel>
         <Panel position="bottom-center" className="!m-3">
           <Tools tool={tool} onTool={setTool} onReset={onReset} />
         </Panel>
-        <Panel position="bottom-right" className="!m-3">
+        <Panel position="bottom-right" className="!m-3 @max-md:hidden">
           <Settings direction={direction} onDirection={setDirection} />
         </Panel>
       </ReactFlow>
