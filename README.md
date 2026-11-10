@@ -110,6 +110,7 @@ Paste a machine into [the app](https://autovisualizer.vercel.app) and you get it
 - **Guard branches.** Literal targets in transition functions are drawn as dashed, numbered branches. When a function computes its target (`target: pick(event.to)`), the Validations panel names it.
 - **Step-through simulation.** Click an event pill and the machine takes that transition. You fire invoked actors and timers yourself: send `done: deploy` or `after 30000ms` when you want them. Add a payload with a custom event, and set the machine's input before a reset.
 - **Problems flagged.** Unreachable states get a warning badge, and the Validations panel lists them with the transitions it can't draw.
+- **Outcomes at a glance.** Final states draw green. Tag a final state `error` or `failure` (`tags: ["error"]`) and it draws red, in the editor, embeds and SVG exports.
 - **Sharing.** Share a link that carries the code. Save the code as `.ts`, or export XState's MachineJSON. Open either kind of file. Your code autosaves in the browser.
 
 ## Agent skills

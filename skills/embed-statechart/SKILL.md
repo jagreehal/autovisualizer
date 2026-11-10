@@ -48,6 +48,7 @@ The code may import `xstate`, `@xstate/effect` and `effect`. When it creates sev
 - Readers scroll past a chart with the wheel or one finger. Mouse drag, or two fingers on a touch screen, pans and zooms it. Below about 520px wide the chart lays out top to bottom.
 - The element is 480px tall. Set `height` in your CSS to change it.
 - `theme` is `auto` (the reader's system setting), `light` or `dark`.
+- Final states draw green. Tag a final state `error` or `failure` to draw it red.
 - Charts load as they near the viewport. A page with ten charts loads the ones readers scroll to.
 - Styles stay inside a shadow root, so the page and the chart keep their own CSS.
 - `embed.d.ts` and `embed.react.d.ts` sit next to `embed.js` and type the element for TypeScript and JSX.
