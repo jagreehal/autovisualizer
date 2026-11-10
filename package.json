@@ -1,6 +1,6 @@
 {
   "name": "autovisualizer",
-  "version": "0.1.0",
+  "version": "0.0.1",
   "description": "See and step through XState v6 and @xstate/effect machines in the browser.",
   "license": "Apache-2.0",
   "author": "Jag Reehal",
@@ -22,6 +22,9 @@
     "build": "pnpm build:embed && vite build",
     "build:embed": "vite build -c vite.embed.config.ts",
     "prepublishOnly": "pnpm build:embed",
+    "changeset": "changeset",
+    "version-packages": "changeset version && pnpm install --lockfile-only",
+    "release": "pnpm build:embed && changeset publish",
     "build:review": "vite build -c vite.review.config.ts",
     "test": "vitest run",
     "check-types": "tsc --noEmit",
@@ -69,6 +72,7 @@
     "xstate": "6.0.0-alpha.73"
   },
   "devDependencies": {
+    "@changesets/cli": "^3.0.3",
     "@oxlint/plugins": "1.89.0",
     "@playwright/test": "1.64.1",
     "@shadcn/lint": "0.2.5",
