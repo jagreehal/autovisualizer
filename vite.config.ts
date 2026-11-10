@@ -16,7 +16,7 @@ export default defineConfig(({ mode }) => {
       tanstackStart(),
       // Deployment target. Nitro picks the preset from the environment: Vercel on
       // `vercel build`, plain Node elsewhere. Serves the /api routes, and the
-      // <autoviz-statechart> embed (public/embed) to other sites' pages.
+      // <auto-visualizer> embed (public/embed) to other sites' pages.
       nitro({ routeRules: { "/embed/**": { headers: { "access-control-allow-origin": "*" } } } }),
       viteReact()
     ],

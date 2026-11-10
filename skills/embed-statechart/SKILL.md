@@ -1,14 +1,14 @@
 ---
 name: embed-statechart
-description: Embed an interactive XState statechart in a docs site, blog or any HTML page with the <autoviz-statechart> web component. Use when someone wants a machine diagram readers can click through, a guided walkthrough of a machine, or a ```statechart fence in Markdown to render as a chart.
+description: Embed an interactive XState statechart in a docs site, blog or any HTML page with the <auto-visualizer> web component. Use when someone wants a machine diagram readers can click through, a guided walkthrough of a machine, or a ```statechart fence in Markdown to render as a chart.
 ---
 
 # Embed a statechart
 
-`<autoviz-statechart>` draws an XState v6 or `@xstate/effect` machine and lets readers send events to it. It needs one script tag. Replace `YOUR-DEPLOYMENT` with the Autovisualizer deployment that serves `/embed/embed.js`.
+`<auto-visualizer>` draws an XState v6 or `@xstate/effect` machine and lets readers send events to it. It needs one script tag. It loads from the `autovisualizer` npm package on any CDN; pin a version (`autovisualizer@0.1.0`) to keep your docs on the release you tested.
 
 ```html
-<script type="module" src="https://YOUR-DEPLOYMENT/embed/embed.js"></script>
+<script type="module" src="https://cdn.jsdelivr.net/npm/autovisualizer/public/embed/embed.js"></script>
 ```
 
 ## Give it a machine
@@ -18,7 +18,7 @@ Pick one source:
 1. **Inline.** Put the code in a `<script type="text/typescript">` inside the tag. The browser keeps it as raw text, so TypeScript generics survive.
 
    ```html
-   <autoviz-statechart>
+   <auto-visualizer>
      <script type="text/typescript">
        import { createMachine } from "xstate"
        export const toggle = createMachine({
@@ -27,11 +27,11 @@ Pick one source:
          states: { off: { on: { TOGGLE: { target: "on" } } }, on: { on: { TOGGLE: { target: "off" } } } }
        })
      </script>
-   </autoviz-statechart>
+   </auto-visualizer>
    ```
 
-2. **A file.** `<autoviz-statechart src="/machines/checkout.ts">`. A `.json` URL loads XState MachineJSON.
-3. **Markdown.** Add `<meta name="autoviz-fences" content="on">` to the page's `<head>`, and a fenced block tagged `statechart` becomes a chart. This covers markdown-it, marked, Shiki and Expressive Code (Starlight), including pages a single-page app renders later. Fences run their code with the page's origin: leave the tag off pages where visitors write Markdown, such as comments or wikis.
+2. **A file.** `<auto-visualizer src="/machines/checkout.ts">`. A `.json` URL loads XState MachineJSON.
+3. **Markdown.** Add `<meta name="auto-visualizer-fences" content="on">` to the page's `<head>`, and a fenced block tagged `statechart` becomes a chart. This covers markdown-it, marked, Shiki and Expressive Code (Starlight), including pages a single-page app renders later. Fences run their code with the page's origin: leave the tag off pages where visitors write Markdown, such as comments or wikis.
 
 The code may import `xstate`, `@xstate/effect` and `effect`. When it creates several machines, pick one with `machine="id"`.
 

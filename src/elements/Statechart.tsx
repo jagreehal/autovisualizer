@@ -1,5 +1,5 @@
 /**
- * <autoviz-statechart>: the interactive canvas on its own, for docs sites and other
+ * <auto-visualizer>: the interactive canvas on its own, for docs sites and other
  * pages that want a machine diagram without the editor. Built by vite.embed.config.ts.
  */
 import "@/styles.css"

@@ -16,14 +16,14 @@ const pageScript: Plugin = {
   }
 }
 
-// Script-tag embed: /embed/embed.js registers <autoviz-statechart>. Built into public/
+// Script-tag embed: /embed/embed.js registers <auto-visualizer>. Built into public/
 // before the app build, so the app deploys it.
 // Shadow DOM so the host page's CSS and ours stay apart.
 export default mergeConfig(
   defineElementsConfig({
-    prefix: "autoviz",
+    prefix: "auto",
     // Load each chart as it nears the viewport: a docs page with ten charts pays for the ones read.
-    elements: { statechart: { component: "src/elements/Statechart.tsx", trigger: "viewport:200px" } },
+    elements: { visualizer: { component: "src/elements/Statechart.tsx", trigger: "viewport:200px" } },
     shadow: true
   }),
   {
