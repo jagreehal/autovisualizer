@@ -36,6 +36,7 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
 
+import { finalTone } from "./final-tone"
 import { SIZE, layout } from "./layout"
 
 import type { Direction, Laidout, Point, StateFlowNode, TransitionFlowEdge } from "./layout"
@@ -210,11 +211,14 @@ function StateNodeView({ data }: NodeProps<StateFlowNode>) {
     )
   }
 
+  const finalKind = state.kind === "final" ? finalTone(state.tags) : undefined
   const tone = isUnreachable
     ? "border-sc-warn-border bg-sc-warn-fill text-sc-warn-fg"
-    : state.kind === "final"
-      ? "border-sc-final-border bg-sc-final-fill text-sc-final-fg"
-      : "border-sc-node-border bg-sc-node text-sc-node-fg"
+    : finalKind === "errorFinal"
+      ? "border-sc-error-final-border bg-sc-error-final-fill text-sc-error-final-fg"
+      : finalKind === "final"
+        ? "border-sc-final-border bg-sc-final-fill text-sc-final-fg"
+        : "border-sc-node-border bg-sc-node text-sc-node-fg"
   return (
     <div
       role="group"
@@ -233,7 +237,11 @@ function StateNodeView({ data }: NodeProps<StateFlowNode>) {
     >
       {decorations}
       <div className="flex items-center gap-2" style={{ height: state.invokes.length > 0 ? 30 : undefined }}>
-        {state.kind === "final" && <CircleDotIcon className="size-5 shrink-0" strokeWidth={2.5} />}
+        {finalKind === "errorFinal" ? (
+          <CircleXIcon className="size-5 shrink-0" strokeWidth={2.5} />
+        ) : finalKind === "final" ? (
+          <CircleDotIcon className="size-5 shrink-0" strokeWidth={2.5} />
+        ) : null}
         <span className="truncate text-xl leading-none font-semibold tracking-tight">{state.key}</span>
       </div>
       <Chips invokes={state.invokes} />

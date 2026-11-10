@@ -56,6 +56,9 @@
   --sc-final-fill: #c9edbc;
   --sc-final-border: #54b559;
   --sc-final-fg: #0c2612;
+  --sc-error-final-fill: #fadcd9;
+  --sc-error-final-border: #d94c3d;
+  --sc-error-final-fg: #3b0a06;
   --sc-warn: #905900;
   --sc-warn-fill: #fde283;
   --sc-warn-border: #da931e;
@@ -103,6 +106,9 @@
   --sc-final-fill: #14371c;
   --sc-final-border: #2f7a3d;
   --sc-final-fg: #c9edbc;
+  --sc-error-final-fill: #3a1410;
+  --sc-error-final-border: #c24a3c;
+  --sc-error-final-fg: #fadcd9;
   --sc-warn: #f8b632;
   --sc-warn-fill: #432b00;
   --sc-warn-border: #8a5a00;
@@ -158,6 +164,9 @@
   --color-sc-final-fill: var(--sc-final-fill);
   --color-sc-final-border: var(--sc-final-border);
   --color-sc-final-fg: var(--sc-final-fg);
+  --color-sc-error-final-fill: var(--sc-error-final-fill);
+  --color-sc-error-final-border: var(--sc-error-final-border);
+  --color-sc-error-final-fg: var(--sc-error-final-fg);
   --color-sc-warn: var(--sc-warn);
   --color-sc-warn-fill: var(--sc-warn-fill);
   --color-sc-warn-border: var(--sc-warn-border);

@@ -3,6 +3,7 @@
  * request, an issue. Several frames make it an animation that steps through them with CSS alone.
  * Pure and deterministic: the same chart and frames always give the same bytes.
  */
+import { finalTone } from "./final-tone"
 import { SIZE } from "./geometry"
 
 import type { Laidout, Point } from "./layout"
@@ -37,6 +38,9 @@ const LIGHT = {
   finalFill: "#c9edbc",
   finalBorder: "#54b559",
   finalFg: "#0c2612",
+  errorFinalFill: "#fadcd9",
+  errorFinalBorder: "#d94c3d",
+  errorFinalFg: "#3b0a06",
   warnFill: "#fde283",
   warnBorder: "#da931e",
   warnFg: "#2e1e00"
@@ -56,6 +60,9 @@ const DARK: typeof LIGHT = {
   finalFill: "#14371c",
   finalBorder: "#2f7a3d",
   finalFg: "#c9edbc",
+  errorFinalFill: "#3a1410",
+  errorFinalBorder: "#c24a3c",
+  errorFinalFg: "#fadcd9",
   warnFill: "#432b00",
   warnBorder: "#8a5a00",
   warnFg: "#fde283"
@@ -142,7 +149,7 @@ export function toSvg(laidout: Laidout, frames: ReadonlyArray<Frame>, options: S
       parents.push(text(at.x + 16, at.y + header / 2, 16, "var(--fg)", state.key || machineId))
       continue
     }
-    const tone = isUnreachable ? "warn" : state.kind === "final" ? "final" : undefined
+    const tone = isUnreachable ? "warn" : state.kind === "final" ? finalTone(state.tags) : undefined
     const fill = tone ? `var(--${tone}Fill)` : "var(--node)"
     const stroke = tone ? `var(--${tone}Border)` : "var(--stroke)"
     const color = tone ? `var(--${tone}Fg)` : "var(--fg)"
