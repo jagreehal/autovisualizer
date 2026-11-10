@@ -37,15 +37,15 @@ export const toggle = createMachine({
   states: { off: { on: { TOGGLE: { target: "on" } } }, on: { on: { TOGGLE: { target: "off" } } } }
 })`
 
-test.describe("The <autoviz-statechart> embed", () => {
+test.describe("The <auto-visualizer> embed", () => {
   test("renders and simulates on another origin's page", async ({ page, baseURL }) => {
     await docsPage(
       page,
       baseURL,
       `<style>button { background: hotpink !important }</style>
-       <meta name="autoviz-fences" content="on">
+       <meta name="auto-visualizer-fences" content="on">
        <pre><code class="language-statechart">${TOGGLE}</code></pre>
-       <autoviz-statechart id="json" src="/toggle.machine.json" style="height: 500px"></autoviz-statechart>`
+       <auto-visualizer id="json" src="/toggle.machine.json" style="height: 500px"></auto-visualizer>`
     )
 
     const chart = page.locator("#json")
@@ -55,7 +55,7 @@ test.describe("The <autoviz-statechart> embed", () => {
     await expect(chart).toHaveCSS("height", "500px")
     // An opt-in in the body (where visitors' Markdown lands) is ignored: the fence stays code.
     await expect(page.locator("pre")).toHaveCount(1)
-    await expect(page.locator("autoviz-statechart")).toHaveCount(1)
+    await expect(page.locator("auto-visualizer")).toHaveCount(1)
 
     await chart.getByRole("button", { name: "TOGGLE" }).and(chart.locator(":enabled")).click()
     await expect(on).toHaveAttribute("aria-current", "true")
@@ -76,19 +76,19 @@ test.describe("The <autoviz-statechart> embed", () => {
       page,
       baseURL,
       `<pre><code class="language-statechart">${TOGGLE}</code></pre>
-       <autoviz-statechart id="walk" style="height: 300px"
+       <auto-visualizer id="walk" style="height: 300px"
          walkthrough='[{"event":"TOGGLE","note":"switch it on"}]'>
          <script type="text/typescript">${TOGGLE}</script>
-       </autoviz-statechart>
-       <autoviz-statechart id="wrong" events="NOPE" style="height: 120px">
+       </auto-visualizer>
+       <auto-visualizer id="wrong" events="NOPE" style="height: 120px">
          <script type="text/typescript">${TOGGLE}</script>
-       </autoviz-statechart>`,
-      `<meta name="autoviz-fences" content="on">`
+       </auto-visualizer>`,
+      `<meta name="auto-visualizer-fences" content="on">`
     )
 
     // The fence became a chart.
     await expect(page.locator("pre")).toHaveCount(0)
-    await expect(page.locator("autoviz-statechart")).toHaveCount(3)
+    await expect(page.locator("auto-visualizer")).toHaveCount(3)
 
     const walk = page.locator("#walk")
     const bar = walk.getByRole("group", { name: "Walkthrough" })
@@ -110,9 +110,9 @@ test.describe("The <autoviz-statechart> embed", () => {
       await docsPage(
         page,
         baseURL,
-        `<autoviz-statechart id="phone" style="height: 500px">
+        `<auto-visualizer id="phone" style="height: 500px">
            <script type="text/typescript">${TOGGLE}</script>
-         </autoviz-statechart>
+         </auto-visualizer>
          <div style="height: 2000px"></div>`,
         // As on any real docs site: without it, mobile Chromium lays the page out 980px wide and shrinks it.
         `<meta name="viewport" content="width=device-width, initial-scale=1">`

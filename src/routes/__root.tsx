@@ -11,6 +11,7 @@ export const Route = createRootRoute({
       { title: "Autovisualizer" }
     ],
     links: [
+      { rel: "icon", type: "image/svg+xml", href: "/favicon.svg" },
       { rel: "stylesheet", href: fontsCss },
       { rel: "stylesheet", href: appCss }
     ]

@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="autoviz-fences" content="on" />
+    <meta name="auto-visualizer-fences" content="on" />
     <title>Statechart embed host</title>
     <!-- Docs-site styles that must stay outside the charts -->
     <style>
@@ -21,7 +21,7 @@
   <body>
     <h2>Source inside the tag</h2>
     <p>Docs prose above the diagram. <button>Host button</button></p>
-    <autoviz-statechart theme="auto">
+    <auto-visualizer theme="auto">
       <script type="text/typescript">
         import { createMachine } from "xstate"
         // Raw text: <generics> and && survive.
@@ -35,7 +35,7 @@
           }
         })
       </script>
-    </autoviz-statechart>
+    </auto-visualizer>
 
     <h2>A Markdown fence, as markdown-it renders ```statechart</h2>
     <pre><code class="language-statechart">import { createMachine } from "xstate"
@@ -46,18 +46,18 @@ export const door = createMachine({
 })</code></pre>
 
     <h2>A walkthrough, starting partway (events), deep-linkable as #walk/2</h2>
-    <autoviz-statechart
+    <auto-visualizer
       id="walk"
       src="src/examples/checkout.ts"
       events="ADD_ITEM"
       walkthrough='[{"event":"CHECKOUT","note":"the cart is ready, ask for an address"},{"event":"SUBMIT","note":"take payment"},{"event":"PAID","note":"done"}]'
-    ></autoviz-statechart>
+    ></auto-visualizer>
 
     <h2>Errors in the chart</h2>
-    <autoviz-statechart src="src/examples/checkout.ts" events="PAID" style="height: 80px"></autoviz-statechart>
-    <autoviz-statechart src="src/examples/checkout.ts" machine="nope" style="height: 80px"></autoviz-statechart>
+    <auto-visualizer src="src/examples/checkout.ts" events="PAID" style="height: 80px"></auto-visualizer>
+    <auto-visualizer src="src/examples/checkout.ts" machine="nope" style="height: 80px"></auto-visualizer>
 
     <h2 style="margin-top: 150vh">Lazy: loads only when scrolled to</h2>
-    <autoviz-statechart id="lazy" src="e2e/fixtures/toggle.machine.json"></autoviz-statechart>
+    <auto-visualizer id="lazy" src="e2e/fixtures/toggle.machine.json"></auto-visualizer>
   </body>
 </html>

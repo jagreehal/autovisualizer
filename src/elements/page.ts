@@ -3,10 +3,10 @@
  * sizes the tag so the page doesn't jump, hands each chart the source written inside it,
  * and, on pages that opt in, turns `statechart` code blocks from Markdown into charts.
  */
-const TAG = "autoviz-statechart"
+const TAG = "auto-visualizer"
 
 // `:where` keeps the default at zero specificity, so any page rule wins:
-// `autoviz-statechart { height: 600px }`.
+// `auto-visualizer { height: 600px }`.
 const style = document.createElement("style")
 style.textContent = `:where(${TAG}){display:block;height:480px}`
 document.head.append(style)
@@ -23,11 +23,11 @@ const FENCES = ["pre > code.language-statechart", "pre.language-statechart", "pr
 )
 
 /**
- * Fences run their code, so a page opts in with `<meta name="autoviz-fences" content="on">`.
+ * Fences run their code, so a page opts in with `<meta name="auto-visualizer-fences" content="on">`.
  * Sites where visitors write Markdown leave it off, and visitors' fences stay code.
  */
 // Read once, from <head> only: markup added later, or in the body, can't turn fences on.
-const fencesOn = document.head.querySelector('meta[name="autoviz-fences"][content="on"]') !== null
+const fencesOn = document.head.querySelector('meta[name="auto-visualizer-fences"][content="on"]') !== null
 
 function upgrade() {
   for (const script of document.querySelectorAll(INLINE)) {
