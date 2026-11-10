@@ -75,6 +75,21 @@ export const linked = createMachine({ id: "linked", initial: "a", states: { a: {
     await expect(page.locator("html")).not.toHaveClass(/dark/)
   })
 
+  test("the canvas can be hidden to show only code, but not every column", async ({ visualizer }) => {
+    await visualizer.goto()
+
+    await visualizer.column("Canvas").click()
+    await expect(visualizer.canvas.root).toBeHidden()
+    await expect(visualizer.column("Code")).toHaveAttribute("aria-pressed", "true")
+
+    // Hiding the last column would leave nothing; the toggle refuses.
+    await visualizer.column("Code").click()
+    await expect(visualizer.column("Code")).toHaveAttribute("aria-pressed", "true")
+
+    await visualizer.column("Canvas").click()
+    await expect(visualizer.canvas.root).toBeVisible()
+  })
+
   test("the sidebar filter narrows the examples", async ({ visualizer }) => {
     await visualizer.goto()
 

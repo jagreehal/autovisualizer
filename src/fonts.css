@@ -1,0 +1,3 @@
+/* Separate from styles.css: @font-face does not work inside the embed's shadow root. */
+@import "@fontsource-variable/geist";
+@import "@fontsource-variable/geist-mono";

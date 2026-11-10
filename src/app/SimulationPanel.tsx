@@ -48,18 +48,19 @@ export function SimulationPanel({ sim, log, inputJson, onInputChange, onRestart,
         </div>
       </Section>
       <Section title="Send an event">
-        <div className="flex flex-wrap gap-1.5">
+        <div className="flex flex-wrap gap-2 py-0.5">
           {sim.nextEvents.length === 0 && <span className="text-sm text-muted-foreground">No events accepted.</span>}
+          {/* Drawn as the canvas draws a sendable event, so the two read as the same thing. */}
           {sim.nextEvents.map((event) => (
-            <Button
+            <button
               key={event.eventJson}
-              size="sm"
-              variant="secondary"
+              type="button"
               title={event.eventJson}
               onClick={() => onSend(event.eventJson)}
+              className="h-8 rounded-full border-2 border-sc-node-border bg-sc-pill px-3.5 text-sm font-semibold text-sc-pill-fg outline-2 outline-sc-active transition-colors hover:bg-sc-active-fill focus-visible:outline-4"
             >
               {event.label}
-            </Button>
+            </button>
           ))}
         </div>
         <p className="text-xs text-muted-foreground">

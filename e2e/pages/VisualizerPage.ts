@@ -59,6 +59,11 @@ export class VisualizerPage {
     await expect(this.panel(name)).toBeVisible()
   }
 
+  /** A Code or Canvas toggle in the column switcher. */
+  column(name: "Code" | "Canvas"): Locator {
+    return this.page.getByRole("toolbar", { name: "Columns" }).getByRole("button", { name })
+  }
+
   async runCommand(label: string) {
     await this.page.keyboard.press("ControlOrMeta+k")
     const menu = this.page.getByRole("dialog", { name: "Command menu" })
@@ -79,16 +84,22 @@ export class VisualizerPage {
     })
   }
 
-  /** Export the current machine as MachineJSON and return the file's name and parsed contents. */
-  async exportMachineJson() {
+  /** Pick an item from the Save menu and return the downloaded file's name and text. */
+  async saveAs(item: RegExp) {
     const download = this.page.waitForEvent("download")
     await this.page.getByRole("button", { name: "Save", exact: true }).click()
-    await this.page.getByRole("menuitem", { name: /MachineJSON/ }).click()
+    await this.page.getByRole("menuitem", { name: item }).click()
     const file = await download
     const stream = await file.createReadStream()
     const chunks: Array<Buffer> = []
     for await (const chunk of stream) chunks.push(Buffer.from(chunk))
-    return { name: file.suggestedFilename(), json: JSON.parse(Buffer.concat(chunks).toString("utf8")) }
+    return { name: file.suggestedFilename(), text: Buffer.concat(chunks).toString("utf8") }
+  }
+
+  /** Export the current machine as MachineJSON and return the file's name and parsed contents. */
+  async exportMachineJson() {
+    const { name, text } = await this.saveAs(/MachineJSON/)
+    return { name, json: JSON.parse(text) }
   }
 
   async copyShareLink(): Promise<string> {

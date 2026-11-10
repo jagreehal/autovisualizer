@@ -1,11 +1,13 @@
 import { Effect, ManagedRuntime } from "effect"
 import {
   BracesIcon,
+  ClapperboardIcon,
   CheckIcon,
   ChevronDownIcon,
   CodeXmlIcon,
   FileCodeIcon,
   FolderOpenIcon,
+  ImageIcon,
   InfoIcon,
   MoonIcon,
   PanelLeftIcon,
@@ -14,12 +16,16 @@ import {
   SearchIcon,
   Share2Icon,
   ShieldCheckIcon,
-  SunIcon
+  SunIcon,
+  WorkflowIcon
 } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useDefaultLayout } from "react-resizable-panels"
 import { toast } from "sonner"
 
 import { Canvas } from "@/canvas/Canvas"
+import { layout } from "@/canvas/layout"
+import { toSvg } from "@/canvas/svg"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -31,6 +37,7 @@ import {
 import { Kbd } from "@/components/ui/kbd"
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable"
 import { Toaster } from "@/components/ui/sonner"
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import approvalExample from "@/examples/approval.ts?raw"
 import checkoutExample from "@/examples/checkout.ts?raw"
@@ -86,6 +93,13 @@ const call = <A,>(program: Effect.Effect<A, WorkerError, MachineWorker>) =>
 
 type RightPanel = "simulation" | "validations" | "details"
 
+/** The two main columns: show either or both. */
+type View = "code" | "canvas"
+const VIEWS = [
+  { value: "code", label: "Code", icon: CodeXmlIcon },
+  { value: "canvas", label: "Canvas", icon: WorkflowIcon }
+] as const
+
 const PANELS = [
   { value: "simulation", label: "Simulation", icon: PlayIcon },
   { value: "validations", label: "Validations", icon: ShieldCheckIcon },
@@ -118,16 +132,39 @@ export function App() {
   const [inputJson, setInputJson] = useState("{}")
   const [sim, setSim] = useState<SimView | undefined>()
   const [log, setLog] = useState<ReadonlyArray<string>>([])
+  /** Every state the simulation has been in since the last reset, for the animated SVG. */
+  const [trace, setTrace] = useState<ReadonlyArray<{ readonly view: SimView; readonly caption: string }>>([])
   const [sidebarOpen, setSidebarOpen] = useState(true)
-  const [codeOpen, setCodeOpen] = useState(true)
+  const [views, setViews] = useState<ReadonlyArray<View>>(["code", "canvas"])
   const [panel, setPanel] = useState<RightPanel | undefined>("simulation")
   const [commandOpen, setCommandOpen] = useState(false)
   const fileInput = useRef<HTMLInputElement>(null)
+  const codeOpen = views.includes("code")
+  const canvasOpen = views.includes("canvas")
+  /** Show or hide a column; the last one visible stays. */
+  const showViews = (next: ReadonlyArray<string>) => {
+    if (next.length > 0) setViews(VIEWS.map((view) => view.value).filter((view) => next.includes(view)))
+  }
+  const toggleView = (view: View) =>
+    showViews(views.includes(view) ? views.filter((open) => open !== view) : [...views, view])
+
+  // Column sizes survive reloads, per combination of visible columns.
+  const columns = useDefaultLayout({
+    id: "autovisualizer:columns",
+    panelIds: [...views, ...(panel ? ["panel"] : [])],
+    storage: localStorage
+  })
+  const outer = useDefaultLayout({
+    id: "autovisualizer:sidebar",
+    panelIds: sidebarOpen ? ["sidebar", "main"] : ["main"],
+    storage: localStorage
+  })
 
   const start = useCallback(async (machine: number, input: string) => {
     const result = await call(MachineWorker.use((worker) => worker.start(machine, input)))
     setSim(result?.view)
     setLog([])
+    setTrace(result ? [{ view: result.view, caption: "start" }] : [])
   }, [])
 
   const visualize = useCallback(
@@ -150,6 +187,11 @@ export function App() {
     if (result === undefined) return
     setSim(result.view)
     setLog((entries) => [...entries, result.view.handled ? eventJson : `${eventJson} (not handled)`])
+    if (!result.view.handled) return
+    setTrace((steps) => {
+      const sent = steps.at(-1)?.view.nextEvents.find((event) => event.eventJson === eventJson)
+      return [...steps, { view: result.view, caption: sent?.label ?? eventJson }]
+    })
   }, [])
 
   /** Replace the code, with an undo toast so nothing is lost by accident. */
@@ -218,6 +260,13 @@ export function App() {
   }
   const save = () => void saveFile(code, `${graph?.id || "machine"}.ts`, "ts")
   const exportJson = () => graph && void saveFile(graph.definitionJson, `${graph.id}.machine.json`, "json")
+  /** The chart as an SVG: as it is now, or animated through every step simulated since the last reset. */
+  const exportSvg = async (animated: boolean) => {
+    if (graph === undefined) return
+    const frames = (animated ? trace : trace.slice(-1)).map(({ view, caption }) => ({ active: view.active, caption }))
+    const svg = toSvg(await layout(graph, "RIGHT"), frames, { title: `${graph.id} statechart` })
+    await saveFile(svg, `${graph.id}${animated ? ".animated" : ""}.svg`, "svg")
+  }
   const share = () => void navigator.clipboard.writeText(shareLink(code)).then(() => toast.success("Link copied"))
 
   // Breadcrumb: the selected state, or the deepest active one.
@@ -245,6 +294,13 @@ export function App() {
     { id: "share", group: "Actions", label: "Copy share link", run: share },
     { id: "save", group: "Actions", label: "Save code (.ts)…", run: save },
     { id: "export", group: "Actions", label: "Export MachineJSON (.json)…", run: exportJson },
+    { id: "svg", group: "Actions", label: "Export SVG image…", run: () => void exportSvg(false) },
+    {
+      id: "svg-animated",
+      group: "Actions",
+      label: "Export animated SVG of the simulation…",
+      run: () => void exportSvg(true)
+    },
     { id: "open", group: "Actions", label: "Open .ts or MachineJSON file…", run: () => fileInput.current?.click() },
     { id: "new", group: "Actions", label: "New machine", run: () => replaceCode(BLANK, "New machine") },
     {
@@ -261,7 +317,8 @@ export function App() {
     })),
     { id: "theme", group: "View", label: `Switch to ${theme === "dark" ? "light" : "dark"} theme`, run: toggleTheme },
     { id: "sidebar", group: "View", label: "Toggle sidebar", run: () => setSidebarOpen((value) => !value) },
-    { id: "code", group: "View", label: "Toggle code", run: () => setCodeOpen((value) => !value) },
+    { id: "code", group: "View", label: "Toggle code", run: () => toggleView("code") },
+    { id: "canvas", group: "View", label: "Toggle canvas", run: () => toggleView("canvas") },
     ...PANELS.map((item) => ({
       id: `panel:${item.value}`,
       group: "View",
@@ -284,6 +341,7 @@ export function App() {
 
   const iconButton = "size-8 text-muted-foreground hover:text-foreground"
   const toolbarButton = "h-8 text-[13px] text-muted-foreground"
+  const segment = "h-8 px-2.5 text-[13px] text-muted-foreground data-[state=on]:text-foreground"
 
   return (
     <TooltipProvider delayDuration={300}>
@@ -372,6 +430,16 @@ export function App() {
                   <BracesIcon /> XState MachineJSON
                   <span className="ml-auto text-xs text-muted-foreground">.json</span>
                 </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => void exportSvg(false)} disabled={graph === undefined}>
+                  <ImageIcon /> SVG image
+                  <span className="ml-auto text-xs text-muted-foreground">.svg</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => void exportSvg(true)} disabled={trace.length < 2}>
+                  <ClapperboardIcon /> Animated SVG
+                  <span className="ml-auto text-xs text-muted-foreground">
+                    {trace.length < 2 ? "simulate first" : `${trace.length} steps`}
+                  </span>
+                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
             <Button size="sm" variant="ghost" className="h-8 text-[13px]" onClick={share}>
@@ -380,161 +448,191 @@ export function App() {
           </div>
         </header>
 
-        <div className="flex min-h-0 flex-1">
+        <ResizablePanelGroup
+          orientation="horizontal"
+          className="min-h-0 flex-1"
+          defaultLayout={outer.defaultLayout}
+          onLayoutChanged={outer.onLayoutChanged}
+        >
           {sidebarOpen && (
-            <Sidebar
-              machines={machines}
-              selected={selectedMachine}
-              onSelect={selectMachine}
-              examples={[...EXAMPLES.keys()]}
-              onExample={(name) => replaceCode(EXAMPLES.get(name) ?? BLANK, `Loaded ${name} example`)}
-              onNew={() => replaceCode(BLANK, "New machine")}
-            />
+            <>
+              <ResizablePanel id="sidebar" defaultSize={288} minSize={200} maxSize={480}>
+                <Sidebar
+                  machines={machines}
+                  selected={selectedMachine}
+                  onSelect={selectMachine}
+                  examples={[...EXAMPLES.keys()]}
+                  onExample={(name) => replaceCode(EXAMPLES.get(name) ?? BLANK, `Loaded ${name} example`)}
+                  onNew={() => replaceCode(BLANK, "New machine")}
+                />
+              </ResizablePanel>
+              <ResizableHandle />
+            </>
           )}
-          <main className="flex min-w-0 flex-1 flex-col">
-            <div className="flex h-11 shrink-0 items-center gap-1 border-b px-2">
-              <Button
-                size="sm"
-                variant="ghost"
-                aria-pressed={codeOpen}
-                className={cn(toolbarButton, codeOpen && "bg-accent text-foreground")}
-                onClick={() => setCodeOpen((value) => !value)}
-              >
-                <CodeXmlIcon /> Code
-              </Button>
-              <Button size="sm" variant="ghost" className={toolbarButton} onClick={() => void visualize(code)}>
-                <PlayIcon /> Visualize <Kbd>⌘↵</Kbd>
-              </Button>
-              <button
-                type="button"
-                onClick={() => setCommandOpen(true)}
-                className="mx-auto flex h-8 w-full max-w-sm items-center gap-2 rounded-md border bg-background px-2.5 text-sm text-muted-foreground transition-colors hover:bg-accent/50"
-              >
-                <SearchIcon className="size-3.5" />
-                Search or run a command…
-                <Kbd className="ml-auto">⌘K</Kbd>
-              </button>
-              {PANELS.map(({ value, label, icon: Icon }) => (
-                <Button
-                  key={value}
+          <ResizablePanel id="main" minSize="40">
+            <main className="flex h-full min-w-0 flex-col">
+              <div className="flex h-11 shrink-0 items-center gap-2 border-b px-2">
+                <ToggleGroup
+                  type="multiple"
+                  variant="outline"
                   size="sm"
-                  variant="ghost"
-                  aria-pressed={panel === value}
-                  className={cn(toolbarButton, panel === value && "bg-accent text-foreground")}
-                  onClick={() => setPanel((current) => (current === value ? undefined : value))}
+                  aria-label="Columns"
+                  value={[...views]}
+                  onValueChange={showViews}
                 >
-                  <Icon /> {label}
-                  {value === "validations" && issues > 0 && (
-                    <span className="rounded-full bg-sc-warn px-1.5 text-[10px] leading-4 font-semibold text-white dark:text-black">
-                      {issues}
-                    </span>
-                  )}
+                  {VIEWS.map(({ value, label, icon: Icon }) => (
+                    <ToggleGroupItem key={value} value={value} className={segment}>
+                      <Icon /> {label}
+                    </ToggleGroupItem>
+                  ))}
+                </ToggleGroup>
+                <Button size="sm" variant="ghost" className={toolbarButton} onClick={() => void visualize(code)}>
+                  <PlayIcon /> Visualize <Kbd>⌘↵</Kbd>
                 </Button>
-              ))}
-            </div>
+                <button
+                  type="button"
+                  onClick={() => setCommandOpen(true)}
+                  className="mx-auto flex h-8 w-full max-w-sm items-center gap-2 rounded-md border bg-background px-2.5 text-sm text-muted-foreground transition-colors hover:bg-accent/50"
+                >
+                  <SearchIcon className="size-3.5" />
+                  Search or run a command…
+                  <Kbd className="ml-auto">⌘K</Kbd>
+                </button>
+                {/* One panel at a time, but every one can be closed: a multiple group holding at most one value. */}
+                <ToggleGroup
+                  type="multiple"
+                  variant="outline"
+                  size="sm"
+                  aria-label="Panels"
+                  value={panel ? [panel] : []}
+                  onValueChange={(next) =>
+                    setPanel(PANELS.find((item) => item.value !== panel && next.includes(item.value))?.value)
+                  }
+                >
+                  {PANELS.map(({ value, label, icon: Icon }) => (
+                    <ToggleGroupItem key={value} value={value} className={segment}>
+                      <Icon /> {label}
+                      {value === "validations" && issues > 0 && (
+                        <span className="rounded-full bg-sc-warn px-1.5 text-[10px] leading-4 font-semibold text-white dark:text-black">
+                          {issues}
+                        </span>
+                      )}
+                    </ToggleGroupItem>
+                  ))}
+                </ToggleGroup>
+              </div>
 
-            <ResizablePanelGroup orientation="horizontal" className="min-h-0 flex-1">
-              {codeOpen && (
-                <>
-                  <ResizablePanel id="code" defaultSize="30" minSize="18">
+              <ResizablePanelGroup
+                orientation="horizontal"
+                className="min-h-0 flex-1"
+                defaultLayout={columns.defaultLayout}
+                onLayoutChanged={columns.onLayoutChanged}
+              >
+                {codeOpen && (
+                  <ResizablePanel id="code" defaultSize={canvasOpen ? "30" : undefined} minSize="18">
                     <Editor code={code} theme={theme} onChange={updateCode} onRun={() => void visualize(code)} />
                   </ResizablePanel>
-                  <ResizableHandle />
-                </>
-              )}
-              <ResizablePanel id="canvas" minSize="30">
-                <div className="flex h-full flex-col">
-                  <section aria-label="Statechart" className="relative min-h-0 flex-1 bg-sc-canvas">
-                    {graph ? (
-                      <Canvas
-                        graph={graph}
-                        simulation={simulation}
-                        selected={selectedState}
-                        onSelect={(id) => {
-                          setSelectedState(id)
-                          if (id !== undefined) setPanel("details")
-                        }}
-                        trail={trail}
-                        onReset={() => void start(selectedMachine, inputJson)}
-                      />
-                    ) : pendingLink ? (
-                      <div
-                        role="alert"
-                        className="m-6 flex max-w-md flex-col gap-3 rounded-lg border bg-background p-4"
-                      >
-                        <p className="font-medium">This link contains code</p>
-                        <p className="text-sm text-muted-foreground">
-                          Someone else wrote it. Read it in the Code panel first: running it executes it in your
-                          browser.
-                        </p>
-                        <Button size="sm" className="self-start" onClick={runLinkCode}>
-                          <PlayIcon /> Run this code
-                        </Button>
-                      </div>
-                    ) : (
-                      <p className="p-6 text-sm text-muted-foreground">Write a machine and press Visualize.</p>
-                    )}
-                  </section>
-                  {stats && (
-                    <footer
-                      role="status"
-                      aria-label="Graph summary"
-                      className="flex h-8 shrink-0 items-center gap-2 overflow-hidden border-t bg-sc-canvas px-4 font-mono text-xs whitespace-nowrap text-sc-status"
-                    >
-                      <span>{stats.states} states</span>·<span>{stats.transitions} transitions</span>
-                      {stats.inferred > 0 && (
-                        <>
-                          ·<span className="text-sc-inferred">{stats.inferred} inferred</span>
-                        </>
+                )}
+                {codeOpen && canvasOpen && <ResizableHandle />}
+                {canvasOpen && (
+                  <ResizablePanel id="canvas" minSize="30">
+                    <div className="flex h-full flex-col">
+                      <section aria-label="Statechart" className="relative min-h-0 flex-1 bg-sc-canvas">
+                        {graph ? (
+                          <Canvas
+                            graph={graph}
+                            simulation={simulation}
+                            selected={selectedState}
+                            onSelect={(id) => {
+                              setSelectedState(id)
+                              if (id !== undefined) setPanel("details")
+                            }}
+                            trail={trail}
+                            onReset={() => void start(selectedMachine, inputJson)}
+                          />
+                        ) : pendingLink ? (
+                          <div
+                            role="alert"
+                            className="m-6 flex max-w-md flex-col gap-3 rounded-lg border bg-background p-4"
+                          >
+                            <p className="font-medium">This link contains code</p>
+                            <p className="text-sm text-muted-foreground">
+                              Someone else wrote it. Read it in the Code panel first: running it executes it in your
+                              browser.
+                            </p>
+                            <Button size="sm" className="self-start" onClick={runLinkCode}>
+                              <PlayIcon /> Run this code
+                            </Button>
+                          </div>
+                        ) : (
+                          <p className="p-6 text-sm text-muted-foreground">Write a machine and press Visualize.</p>
+                        )}
+                      </section>
+                      {stats && (
+                        <footer
+                          role="status"
+                          aria-label="Graph summary"
+                          className="flex h-8 shrink-0 items-center gap-2 overflow-hidden border-t bg-sc-canvas px-4 font-mono text-xs whitespace-nowrap text-sc-status"
+                        >
+                          <span>{stats.states} states</span>·<span>{stats.transitions} transitions</span>
+                          {stats.inferred > 0 && (
+                            <>
+                              ·<span className="text-sc-inferred">{stats.inferred} inferred</span>
+                            </>
+                          )}
+                          {stats.unreachable > 0 && (
+                            <>
+                              ·<span className="text-sc-warn">{stats.unreachable} unreachable</span>
+                            </>
+                          )}
+                          {stats.unresolved > 0 && (
+                            <>
+                              ·<span className="text-sc-inferred">{stats.unresolved} unresolved</span>
+                            </>
+                          )}
+                          ·<span>machine: {graph.id}</span>
+                          {sim && (
+                            <>
+                              ·
+                              <span className="truncate">
+                                state: <span className="text-sc-active">{sim.valueJson.replace(/\s+/g, " ")}</span>
+                              </span>
+                            </>
+                          )}
+                        </footer>
                       )}
-                      {stats.unreachable > 0 && (
-                        <>
-                          ·<span className="text-sc-warn">{stats.unreachable} unreachable</span>
-                        </>
-                      )}
-                      {stats.unresolved > 0 && (
-                        <>
-                          ·<span className="text-sc-inferred">{stats.unresolved} unresolved</span>
-                        </>
-                      )}
-                      ·<span>machine: {graph.id}</span>
-                      {sim && (
-                        <>
-                          ·<span className="truncate opacity-60">state: {sim.valueJson.replace(/\s+/g, " ")}</span>
-                        </>
-                      )}
-                    </footer>
-                  )}
-                </div>
-              </ResizablePanel>
-              {panel && (
-                <>
-                  <ResizableHandle />
-                  <ResizablePanel id="panel" defaultSize="24" minSize="16">
-                    <aside
-                      aria-label={PANELS.find((item) => item.value === panel)?.label}
-                      className="h-full overflow-auto bg-background"
-                    >
-                      <PanelTitle>{PANELS.find((item) => item.value === panel)?.label}</PanelTitle>
-                      {panel === "simulation" && (
-                        <SimulationPanel
-                          sim={sim}
-                          log={log}
-                          inputJson={inputJson}
-                          onInputChange={setInputJson}
-                          onRestart={() => void start(selectedMachine, inputJson)}
-                          onSend={(eventJson) => void send(eventJson)}
-                        />
-                      )}
-                      {panel === "validations" && <ValidationsPanel graph={graph} warning={warning} />}
-                      {panel === "details" && <DetailsPanel graph={graph} stateId={selectedState} />}
-                    </aside>
+                    </div>
                   </ResizablePanel>
-                </>
-              )}
-            </ResizablePanelGroup>
-          </main>
-        </div>
+                )}
+                {panel && (
+                  <>
+                    <ResizableHandle />
+                    <ResizablePanel id="panel" defaultSize="24" minSize="16">
+                      <aside
+                        aria-label={PANELS.find((item) => item.value === panel)?.label}
+                        className="h-full overflow-auto bg-background"
+                      >
+                        <PanelTitle>{PANELS.find((item) => item.value === panel)?.label}</PanelTitle>
+                        {panel === "simulation" && (
+                          <SimulationPanel
+                            sim={sim}
+                            log={log}
+                            inputJson={inputJson}
+                            onInputChange={setInputJson}
+                            onRestart={() => void start(selectedMachine, inputJson)}
+                            onSend={(eventJson) => void send(eventJson)}
+                          />
+                        )}
+                        {panel === "validations" && <ValidationsPanel graph={graph} warning={warning} />}
+                        {panel === "details" && <DetailsPanel graph={graph} stateId={selectedState} />}
+                      </aside>
+                    </ResizablePanel>
+                  </>
+                )}
+              </ResizablePanelGroup>
+            </main>
+          </ResizablePanel>
+        </ResizablePanelGroup>
       </div>
       <CommandMenu open={commandOpen} onOpenChange={setCommandOpen} actions={actions} />
       <Toaster position="bottom-right" />

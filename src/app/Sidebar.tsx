@@ -99,7 +99,7 @@ export function Sidebar({ machines, selected, onSelect, examples, onExample, onN
     sorted ? [...items].sort((a, b) => name(a).localeCompare(name(b))) : items
 
   return (
-    <aside aria-label="Machines" className="flex h-full w-[288px] shrink-0 flex-col border-r bg-background">
+    <aside aria-label="Machines" className="flex h-full w-full flex-col bg-background">
       <div className="flex h-11 items-center border-b px-2">
         <div className="flex w-full">
           <Button size="sm" className="h-8 flex-1 rounded-r-none" onClick={onNew}>

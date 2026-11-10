@@ -1,0 +1,152 @@
+name: 'Autovisualizer statechart review'
+description: >-
+  Reviews the XState machines a pull request touched: states and transitions added and
+  removed, newly unreachable states, and a statechart per changed machine with the changes
+  highlighted, posted as one sticky PR comment and the job summary.
+author: 'Jag Reehal'
+branding:
+  icon: 'git-pull-request'
+  color: 'blue'
+
+inputs:
+  path:
+    description: 'Git pathspec(s) to review, space separated. Empty reviews the whole change.'
+    default: ''
+  base:
+    description: 'Ref to compare against. Defaults to the PR base, or the previous commit on push.'
+    default: ''
+  head:
+    description: 'Ref holding the change. Defaults to the PR head, or HEAD on push.'
+    default: ''
+  comment:
+    description: 'Post (and keep updating) one review comment on the pull request.'
+    default: 'true'
+  fail-on-regression:
+    description: 'Fail the job when merge risk is high (a machine lost a state or transition, or a state became unreachable).'
+    default: 'false'
+  diagrams:
+    description: 'Statecharts in the comment: open (expanded) or collapsed.'
+    default: 'open'
+  app-url:
+    description: 'An Autovisualizer deployment. Adds an "Open in Autovisualizer" link to each changed machine.'
+    default: ''
+  cli:
+    description: 'Command that runs the review. Empty builds it from this action''s source.'
+    default: ''
+  github-token:
+    description: 'Token used to post the comment.'
+    default: ${{ github.token }}
+
+outputs:
+  risk:
+    description: 'Merge risk: low, moderate or high.'
+    value: ${{ steps.review.outputs.risk }}
+  report:
+    description: 'Path of the markdown report.'
+    value: ${{ steps.review.outputs.report }}
+
+runs:
+  using: composite
+  steps:
+    # The review runs the reviewed code. pull_request_target would run a fork's code
+    # with a write token and the base repo's secrets, so refuse it outright.
+    - name: Refuse pull_request_target
+      if: github.event_name == 'pull_request_target'
+      shell: bash
+      run: |
+        echo "::error::the statechart review runs the PR's machine code; use on: pull_request, not pull_request_target"
+        exit 1
+
+    - name: Resolve refs
+      id: refs
+      shell: bash
+      env:
+        INPUT_BASE: ${{ inputs.base }}
+        INPUT_HEAD: ${{ inputs.head }}
+        PR_BASE: ${{ github.event.pull_request.base.sha }}
+        PR_HEAD: ${{ github.event.pull_request.head.sha }}
+        PUSH_BEFORE: ${{ github.event.before }}
+      run: |
+        base="${INPUT_BASE:-${PR_BASE:-$PUSH_BEFORE}}"
+        head="${INPUT_HEAD:-${PR_HEAD:-HEAD}}"
+        # First push of a branch has an all-zero "before".
+        case "$base" in ''|0000000000000000000000000000000000000000) base=HEAD~1; git fetch --no-tags --deepen=1 origin 2>/dev/null || true ;; esac
+        node -e 'process.exit(+process.versions.node.split(".")[0] >= 24 ? 0 : 1)' \
+          || { echo "::error::the statechart review needs Node 24+; add actions/setup-node with node-version: 24 before this step"; exit 1; }
+        # A shallow checkout has neither side; fetch just those commits.
+        git fetch --no-tags --depth=1 origin "$base" "$head" 2>/dev/null || true
+        echo "base=$base" >> "$GITHUB_OUTPUT"
+        echo "head=$head" >> "$GITHUB_OUTPUT"
+
+    - name: Build the review
+      id: cli
+      shell: bash
+      env:
+        CLI: ${{ inputs.cli }}
+      run: |
+        set -euo pipefail
+        if [ -z "$CLI" ]; then
+          cd "$GITHUB_ACTION_PATH"
+          if [ ! -f dist/review/cli.mjs ]; then
+            pnpm="npx -y $(node -p 'require("./package.json").packageManager')"
+            $pnpm install --frozen-lockfile >&2
+            $pnpm build:review >&2
+          fi
+          CLI="node $GITHUB_ACTION_PATH/dist/review/cli.mjs"
+        fi
+        echo "cli=$CLI" >> "$GITHUB_OUTPUT"
+
+    - name: Review
+      id: review
+      shell: bash
+      env:
+        CLI: ${{ steps.cli.outputs.cli }}
+        PATHS: ${{ inputs.path }}
+        DIAGRAMS: ${{ inputs.diagrams }}
+        APP_URL: ${{ inputs.app-url }}
+        BASE: ${{ steps.refs.outputs.base }}
+        HEAD: ${{ steps.refs.outputs.head }}
+      run: |
+        set -euo pipefail
+        out="$RUNNER_TEMP/autovisualizer-review"
+        mkdir -p "$out"
+        # shellcheck disable=SC2086
+        $CLI review $PATHS --diagrams "$DIAGRAMS" ${APP_URL:+--app-url "$APP_URL"} --base "$BASE" --head "$HEAD" --format json -o "$out/review.json"
+        jq -r .markdown "$out/review.json" > "$out/review.md"
+        cat "$out/review.md" >> "$GITHUB_STEP_SUMMARY"
+        echo "risk=$(jq -r .risk "$out/review.json")" >> "$GITHUB_OUTPUT"
+        echo "report=$out/review.md" >> "$GITHUB_OUTPUT"
+
+    - name: Post review comment
+      if: inputs.comment == 'true' && github.event.pull_request
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        REPORT: ${{ steps.review.outputs.report }}
+        REPO: ${{ github.repository }}
+        PR: ${{ github.event.pull_request.number }}
+      run: |
+        set -euo pipefail
+        marker='<!-- autovisualizer-review -->'
+        # Update only a comment this token posted: anyone can write the marker.
+        # The default token can't read /user; it posts as github-actions[bot].
+        me=$(gh api user --jq .login 2>/dev/null || echo 'github-actions[bot]')
+        existing=$( (gh api "repos/$REPO/issues/$PR/comments" --paginate \
+          --jq "map(select(.user.login == \"$me\" and (.body | startswith(\"$marker\")))) | .[].id" || true) | head -n1)
+        # A fork PR's token is read-only: the job summary still has the report.
+        create() { gh api "repos/$REPO/issues/$PR/comments" -F body=@"$REPORT" --silent; }
+        post() {
+          if [ -n "$existing" ]; then
+            gh api -X PATCH "repos/$REPO/issues/comments/$existing" -F body=@"$REPORT" --silent || create
+          else
+            create
+          fi
+        }
+        post || echo "::warning::could not post the statechart review comment (read-only token? fork PR?). The report is in the job summary."
+
+    - name: Gate
+      if: inputs.fail-on-regression == 'true' && steps.review.outputs.risk == 'high'
+      shell: bash
+      run: |
+        echo "::error::statechart review: merge risk is high (see the review comment or job summary)"
+        exit 1

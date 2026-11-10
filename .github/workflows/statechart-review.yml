@@ -1,0 +1,42 @@
+name: Statechart review
+
+# Runs ./action.yml on this repo's own pull requests, with the CLI built from the
+# branch under review.
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: statechart-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build the review CLI
+        run: pnpm build:review
+
+      - uses: ./
+        with:
+          path: src/examples
+          cli: node dist/review/cli.mjs

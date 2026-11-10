@@ -36,7 +36,8 @@ export function shareLink(code: string): string {
 
 const FILE_TYPES = {
   ts: { mime: "text/typescript", description: "TypeScript", extension: ".ts" },
-  json: { mime: "application/json", description: "XState MachineJSON", extension: ".json" }
+  json: { mime: "application/json", description: "XState MachineJSON", extension: ".json" },
+  svg: { mime: "image/svg+xml", description: "SVG image", extension: ".svg" }
 } as const
 
 /** Save with the File System Access API where the browser has it, otherwise download. */
