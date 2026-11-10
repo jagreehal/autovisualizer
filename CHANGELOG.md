@@ -1,5 +1,11 @@
 # autovisualizer
 
+## 0.2.0
+
+### Minor Changes
+
+- 8221728: Final states tagged `error` or `failure` now draw in red, in the editor, embeds and SVG exports. Other final states stay green.
+
 ## 0.1.0
 
 ### Minor Changes
