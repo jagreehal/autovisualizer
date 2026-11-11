@@ -6,9 +6,9 @@
 const TAG = "auto-visualizer"
 
 // `:where` keeps the default at zero specificity, so any page rule wins:
-// `auto-visualizer { height: 600px }`.
+// `auto-visualizer { height: 600px }`. Without one, the chart sets --autoviz-fit to its own height.
 const style = document.createElement("style")
-style.textContent = `:where(${TAG}){display:block;height:480px}`
+style.textContent = `:where(${TAG}){display:block;height:var(--autoviz-fit,480px)}`
 document.head.append(style)
 
 /**
@@ -16,6 +16,13 @@ document.head.append(style)
  * TypeScript survive, and the browser neither runs nor shows it. A `code` attribute wins.
  */
 const INLINE = `${TAG}:not([code]) > script[type="text/typescript"]`
+
+/**
+ * A MachineJSON definition inside the tag, `<script type="application/json">`, or shared by several charts on the
+ * page: `definition="#checkout"` names the element (usually such a script) that holds it.
+ */
+const INLINE_DEFINITION = `${TAG}:not([definition]) > script[type="application/json"]`
+const SHARED_DEFINITION = `${TAG}[definition^="#"]`
 
 /** What Markdown renderers emit for a ```statechart fence: markdown-it, marked, Shiki, Expressive Code. */
 const FENCES = ["pre > code.language-statechart", "pre.language-statechart", "pre[data-language='statechart']"].join(
@@ -32,6 +39,15 @@ const fencesOn = document.head.querySelector('meta[name="auto-visualizer-fences"
 function upgrade() {
   for (const script of document.querySelectorAll(INLINE)) {
     script.parentElement?.setAttribute("code", script.textContent ?? "")
+  }
+  for (const script of document.querySelectorAll(INLINE_DEFINITION)) {
+    script.parentElement?.setAttribute("definition", script.textContent ?? "")
+  }
+  for (const chart of document.querySelectorAll(SHARED_DEFINITION)) {
+    const ref = chart.getAttribute("definition") ?? ""
+    const source = document.getElementById(ref.slice(1))
+    // Left as it is when missing: the chart reports the attribute isn't JSON, naming what it was given.
+    if (source !== null) chart.setAttribute("definition", source.textContent ?? "")
   }
   if (!fencesOn) return
   for (const match of document.querySelectorAll(FENCES)) {

@@ -8,7 +8,7 @@ import { Schema } from "effect"
 import { allNodes, describe, eventFor, transitionId } from "./graph"
 import { getMicrosteps, getNextTransitions, initialTransition, isUnhandled, StateMachine } from "xstate"
 
-import type { AnyEventObject, AnyMachineSnapshot, AnyStateMachine, AnyStateNode } from "xstate"
+import type { AnyEventObject, AnyMachineSnapshot, AnyStateMachine, AnyStateNode, Snapshot } from "xstate"
 
 /** Machine input or event payload: any JSON object. */
 export const JsonObject = Schema.Record(Schema.String, Schema.Json)
@@ -118,6 +118,33 @@ export function start(
   )
   const { value, context: reachedContext, status, output, error } = reached
   return machine.resolveState({ value, context: reachedContext, historyValue, status, output, error })
+}
+
+/**
+ * The snapshot an actor persisted (`getPersistedSnapshot()`), exactly where it left off: value, context, history,
+ * children and pending timers. Unlike `start`, nothing is entered again, so no entry actions run. xstate checks the
+ * snapshot fits the machine (its id, version and states) and says what doesn't.
+ */
+export function restore(machine: AnyStateMachine, persisted: JsonObject): AnyMachineSnapshot {
+  // AnyStateMachine types restoreSnapshot as optional; a StateMachine always has it, with an inert scope by default.
+  if (!(machine instanceof StateMachine)) throw new Error(`${machine.id} can't restore a snapshot`)
+  return machine.restoreSnapshot(snapshotFrom(persisted))
+}
+
+/** Persisted JSON as xstate's Snapshot: its status says which of output and error it carries. */
+function snapshotFrom(json: JsonObject): Snapshot<unknown> {
+  const { status } = json
+  switch (status) {
+    case "active":
+    case "stopped":
+      return { ...json, status, output: undefined, error: undefined }
+    case "done":
+      return { ...json, status, output: json["output"], error: undefined }
+    case "error":
+      return { ...json, status, output: undefined, error: json["error"] }
+    default:
+      throw new Error(`A persisted snapshot's status is active, done, error or stopped, not ${JSON.stringify(status)}`)
+  }
 }
 
 /** One evaluation of the event: transition functions and guards run once, and the trace matches the snapshot. */

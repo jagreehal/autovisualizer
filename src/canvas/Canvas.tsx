@@ -37,8 +37,10 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { cn } from "@/lib/utils"
 
 import { finalTone } from "./final-tone"
+import { roomier } from "./geometry"
 import { SIZE, layout } from "./layout"
 
+import type { Size } from "./geometry"
 import type { Direction, Laidout, Point, StateFlowNode, TransitionFlowEdge } from "./layout"
 import type { MachineGraph, StateGraphEdge } from "@/machine/graph"
 import type { EdgeProps, NodeProps } from "@xyflow/react"
@@ -408,7 +410,7 @@ const iconButton =
 // Small machines grow up to 150%.
 const FIT = { padding: { top: "72px", bottom: "84px", x: "32px" }, maxZoom: 1.5 } as const
 // Compact has no breadcrumb above.
-const COMPACT_FIT = { ...FIT, padding: { ...FIT.padding, top: "32px" } } as const
+export const COMPACT_FIT = { ...FIT, padding: { ...FIT.padding, top: "32px" } } as const
 const useFit = () => (use(CanvasContext).compact ? COMPACT_FIT : FIT)
 
 /** Refit when the canvas changes size: a column shown, hidden or dragged. */
@@ -555,12 +557,16 @@ export interface CanvasProps {
   readonly onReset: () => void
   /** For embeds, where the page names the machine: no breadcrumb, and no title bar on the machine. */
   readonly compact?: boolean
-  /** Top to bottom suits a narrow, portrait container. */
-  readonly initialDirection?: Direction
+  /** AUTO lays the chart out both ways and keeps the one that shows it larger in `fitArea`. */
+  readonly initialDirection?: Direction | "AUTO"
+  /** The space the chart will be fitted to, for AUTO: the canvas, or as tall as it may grow. */
+  readonly fitArea?: () => Size
   /** How often each edge was taken, by edge id: shown on its pill, and an edge never taken is drawn dashed. */
   readonly counts?: ReadonlyMap<string, number>
   /** Edges a replay took, highlighted as a path. */
   readonly taken?: ReadonlySet<string>
+  /** The laid-out chart's size, each time it is laid out. */
+  readonly onLayout?: (size: { readonly width: number; readonly height: number }) => void
 }
 
 const NO_COUNTS: ReadonlyMap<string, number> = new Map()
@@ -576,22 +582,57 @@ export function Canvas({
   compact = false,
   initialDirection = "RIGHT",
   counts = NO_COUNTS,
-  taken = NOT_TAKEN
+  taken = NOT_TAKEN,
+  onLayout,
+  fitArea
 }: CanvasProps) {
-  const [direction, setDirection] = useState<Direction>(initialDirection)
+  // Undefined until AUTO has picked one.
+  const [direction, setDirection] = useState<Direction | undefined>(
+    initialDirection === "AUTO" ? undefined : initialDirection
+  )
   const [tool, setTool] = useState<Tool>("simulate")
   const [locked, setLocked] = useState(false)
   const [laidout, setLaidout] = useState<Laidout | undefined>()
 
+  // AUTO: lay out both ways and pick, then lay out the pick as usual (layouts of a docs-sized machine take
+  // milliseconds; keeping one effect path is worth the third).
   useEffect(() => {
+    if (direction !== undefined) return
+    let cancelled = false
+    const size = (laid: Laidout): Size => ({ width: laid.nodes[0]?.width ?? 1, height: laid.nodes[0]?.height ?? 1 })
+    void Promise.all([layout(graph, "RIGHT", !compact, counts), layout(graph, "DOWN", !compact, counts)]).then(
+      ([right, down]) => {
+        if (cancelled) return
+        const area = fitArea?.()
+        const fit = compact ? COMPACT_FIT : FIT
+        const inset = {
+          x: Number.parseFloat(fit.padding.x),
+          top: Number.parseFloat(fit.padding.top),
+          bottom: Number.parseFloat(fit.padding.bottom)
+        }
+        setDirection(
+          area === undefined || area.width === 0 ? "RIGHT" : roomier(size(right), size(down), area, inset, fit.maxZoom)
+        )
+      }
+    )
+    return () => {
+      cancelled = true
+    }
+  }, [graph, direction, compact, counts, fitArea])
+
+  useEffect(() => {
+    if (direction === undefined) return
     let cancelled = false
     void layout(graph, direction, !compact, counts).then((result) => {
-      if (!cancelled) setLaidout(result)
+      if (cancelled) return
+      setLaidout(result)
+      const root = result.nodes[0]
+      if (root) onLayout?.({ width: root.width ?? 0, height: root.height ?? 0 })
     })
     return () => {
       cancelled = true
     }
-  }, [graph, direction, compact, counts])
+  }, [graph, direction, compact, counts, onLayout])
 
   if (laidout === undefined) return <div className="h-full bg-sc-canvas" />
   return (
@@ -650,7 +691,7 @@ export function Canvas({
           <Tools tool={tool} onTool={setTool} onReset={onReset} />
         </Panel>
         <Panel position="bottom-right" className="!m-3 @max-md:hidden">
-          <Settings direction={direction} onDirection={setDirection} />
+          <Settings direction={direction ?? "RIGHT"} onDirection={setDirection} />
         </Panel>
       </ReactFlow>
     </CanvasContext>

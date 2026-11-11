@@ -42,7 +42,7 @@ Inputs worth setting:
 | --- | --- |
 | `path` | Pathspecs to review, space separated. Empty reviews the whole change. |
 | `fail-on-regression` | `true` fails the job when the merge risk is high. |
-| `app-url` | `https://autovisualizer.vercel.app` adds an "Open in Autovisualizer" link per machine. |
+| `app-url` | `https://auto-visualizer.vercel.app` adds an "Open in Autovisualizer" link per machine. |
 | `diagrams` | `collapsed` folds the diagrams in the comment. |
 
 Use the `pull_request` trigger. The action runs the PR's code, the same as its tests, and refuses `pull_request_target`.

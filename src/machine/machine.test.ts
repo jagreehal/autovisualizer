@@ -9,7 +9,7 @@ import { machineToJSON } from "xstate"
 
 import { codeFromDefinition } from "./definition"
 import { toMachineGraph, unreachableStates } from "./graph"
-import { start, step, view } from "./simulate"
+import { restore, start, step, view } from "./simulate"
 import { takenEdges } from "../canvas/overlay"
 
 const example = (name: string) => readFileSync(join(__dirname, "..", "examples", `${name}.ts`), "utf8")
@@ -117,6 +117,42 @@ describe("simulate", () => {
     expect(handled).toBe(true)
     expect(view(snapshot, handled)).toMatchObject({ valueJson: '"deployed"', status: "done" })
     expect(JSON.parse(view(snapshot, handled).contextJson)).toEqual({ release: "v1", url: "https://x" })
+  })
+})
+
+describe("restore", () => {
+  const COUNTER = `import { createMachine } from "xstate"
+export const counter = createMachine({
+  id: "counter",
+  initial: "idle",
+  context: { visits: 0 },
+  states: {
+    idle: { on: { GO: { target: "busy" } } },
+    busy: {
+      entry: ({ context }) => ({ context: { visits: context.visits + 1 } }),
+      initial: "a",
+      states: { a: { on: { NEXT: { target: "b" } } }, b: {}, hist: { type: "history", target: "a" } },
+      on: { PAUSE: { target: "idle" } }
+    }
+  }
+})`
+
+  it("resumes a persisted snapshot as it was, without entering its states again", async () => {
+    const [machine] = await load(COUNTER)
+    let snapshot = start(machine!, {})
+    for (const type of ["GO", "NEXT"]) [snapshot] = step(machine!, snapshot, { type })
+    const persisted = JSON.parse(JSON.stringify(machine!.getPersistedSnapshot!(snapshot)))
+
+    const resumed = restore(machine!, persisted)
+    // busy's entry ran once, on GO; resuming doesn't run it again, as state="busy.b" would.
+    expect(view(resumed, true)).toMatchObject({ valueJson: '{\n  "busy": "b"\n}', contextJson: '{\n  "visits": 1\n}' })
+    expect(JSON.parse(view(start(machine!, {}, "busy.b", { visits: 1 }), true).contextJson)).toEqual({ visits: 2 })
+  })
+
+  it("says what doesn't fit", async () => {
+    const [machine] = await load(COUNTER)
+    expect(() => restore(machine!, { status: "active", value: "nowhere", context: {}, children: {} })).toThrow()
+    expect(() => restore(machine!, { status: "sleeping" })).toThrow(/active, done, error or stopped/)
   })
 })
 

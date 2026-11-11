@@ -12,7 +12,9 @@ export const Request = Schema.Union([
     inputJson: Schema.String,
     /** Space-separated states to open in; empty for the initial state. */
     state: Schema.String,
-    contextJson: Schema.String
+    contextJson: Schema.String,
+    /** A persisted snapshot (`actor.getPersistedSnapshot()`) to resume exactly; wins over `state` and `context`. */
+    snapshotJson: Schema.optionalKey(Schema.String)
   }),
   Schema.TaggedStruct("Send", { id: Schema.Number, eventJson: Schema.String })
 ])
