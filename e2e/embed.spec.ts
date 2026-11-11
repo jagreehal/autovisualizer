@@ -322,7 +322,9 @@ test.describe("<auto-visualizer> with a MachineJSON definition", () => {
 })
 
 /** The element once its chart has loaded: the method a docs build calls from a headless browser. */
-type Exporting = HTMLElement & { toAnimatedSvg(options: { title: string }): Promise<string> }
+type Exporting = HTMLElement & {
+  toAnimatedSvg(options: { title: string; direction?: "right" | "down" }): Promise<string>
+}
 
 test.describe("<auto-visualizer> layout, links and export", () => {
   test("lays a long chain out top to bottom in a wide column", async ({ page, baseURL }) => {
@@ -380,11 +382,21 @@ test.describe("<auto-visualizer> layout, links and export", () => {
     const chart = page.locator("#walk")
     await expect(chart.getByRole("group", { name: "off", exact: true })).toHaveAttribute("aria-current", "true")
     await chart.getByRole("group", { name: "Walkthrough" }).getByRole("button", { name: "Next step" }).click()
-    const svg = await chart.evaluate((element: Exporting) => element.toAnimatedSvg({ title: "Toggle" }))
+    const svg = await chart.evaluate((element: Exporting) =>
+      element.toAnimatedSvg({ title: "Toggle", direction: "down" })
+    )
     expect(svg).toMatch(/^<svg/)
     expect(svg).toContain("Step 1 of 2: start")
     expect(svg).toContain("Step 2 of 2: TOGGLE: switch it on")
     expect(svg).not.toContain("<script")
+    // The machine's name bar sits above its states, not over the first one (top to bottom puts a state at the top).
+    const header =
+      /<rect x="[\d.-]+" y="([\d.-]+)" width="[\d.-]+" height="([\d.-]+)" rx="6" fill="var\(--header\)"/.exec(svg)
+    const stateTops = [...svg.matchAll(/<rect x="[\d.-]+" y="([\d.-]+)"[^>]*fill="var\(--node\)"/g)].map((m) =>
+      Number(m[1])
+    )
+    expect(header, "the name bar").not.toBeNull()
+    expect(Math.min(...stateTops)).toBeGreaterThanOrEqual(Number(header?.[1]) + Number(header?.[2]))
     // The chart is back on the step it showed.
     await expect(chart.getByRole("group", { name: "on", exact: true })).toHaveAttribute("aria-current", "true")
   })
