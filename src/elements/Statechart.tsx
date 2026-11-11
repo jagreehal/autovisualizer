@@ -432,7 +432,8 @@ export default function Statechart({
         ...walkthrough.map((walk) => `${eventOf(walk).type}${walk.note ? `: ${walk.note}` : ""}`)
       ]
       const frames = views.map((view, i) => ({ active: view.active, caption: captions[i] ?? "" }))
-      const laid = await layout(graph, options.direction === "down" ? "DOWN" : "RIGHT", false)
+      // With the root's header row, like the editor's export: toSvg draws the machine's name bar there.
+      const laid = await layout(graph, options.direction === "down" ? "DOWN" : "RIGHT")
       return toSvg(laid, frames, { title: options.title ?? `${graph.id} statechart`, stepMs: options.stepMs })
     }
     Object.assign(element, { toAnimatedSvg })
