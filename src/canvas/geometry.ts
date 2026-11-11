@@ -1,4 +1,4 @@
-import type { Point } from "./layout"
+import type { Direction, Point } from "./layout"
 
 /**
  * Sizes shared by the layout, the canvas and the SVG export: 20px state names and 14px
@@ -105,3 +105,26 @@ export function placePills(
     return spot
   })
 }
+
+export interface Size {
+  readonly width: number
+  readonly height: number
+}
+
+/** Space kept clear around a fitted chart: the floating chrome. */
+export interface Inset {
+  readonly x: number
+  readonly top: number
+  readonly bottom: number
+}
+
+/** The zoom that fits a `chart`-sized layout in `area` inside `inset`, capped at `max`. */
+export const fitScale = (chart: Size, area: Size, inset: Inset, max: number) =>
+  Math.min(max, (area.width - 2 * inset.x) / chart.width, (area.height - inset.top - inset.bottom) / chart.height)
+
+/**
+ * The direction that shows the chart larger in `area`: a long chain reads better top to bottom in a wide column, and
+ * a wide machine left to right in a short one. Right on a tie, such as a small machine that fits either way.
+ */
+export const roomier = (right: Size, down: Size, area: Size, inset: Inset, max: number): Direction =>
+  fitScale(down, area, inset, max) > fitScale(right, area, inset, max) ? "DOWN" : "RIGHT"

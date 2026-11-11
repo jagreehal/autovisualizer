@@ -11,11 +11,13 @@ import { Effect, ManagedRuntime, Schema } from "effect"
 import { ChevronLeftIcon, ChevronRightIcon, PauseIcon, PlayIcon } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
-import { Canvas } from "@/canvas/Canvas"
+import { COMPACT_FIT, Canvas } from "@/canvas/Canvas"
+import { layout } from "@/canvas/layout"
 import { countsByEdge, takenEdges } from "@/canvas/overlay"
+import { toSvg } from "@/canvas/svg"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { MachineWorker } from "@/machine/client"
-import { isString, JsonEvent } from "@/machine/json"
+import { carriesCode, isString, JsonEvent } from "@/machine/json"
 import { codeFromDefinition } from "@/machine/definition"
 
 import type { Simulation } from "@/canvas/Canvas"
@@ -34,8 +36,14 @@ interface WalkthroughStep {
 }
 
 interface StatechartProps {
-  /** Machine source, TypeScript or JavaScript. It may import xstate, effect and the xstate effect package. Wins over `src`. */
+  /** Machine source, TypeScript or JavaScript. It may import xstate, effect and the xstate effect package. Wins over `definition` and `src`. */
   code?: string
+  /**
+   * The machine as an XState MachineJSON definition. Data, not code, so it is drawn and stepped on the page with no
+   * Web Worker: it works on a page opened from disk and in sandboxed iframes. Wins over `src`. One with `@code` or
+   * `@expr` runs that code, in the worker like `code`.
+   */
+  definition?: JsonObject
   /** URL of a machine module (.ts/.js) or a MachineJSON file (.json). */
   src?: string
   /** Id of the machine to show when the code creates several. Defaults to the first. */
@@ -57,6 +65,11 @@ interface StatechartProps {
    */
   context?: JsonObject
   /**
+   * A persisted snapshot to resume exactly where it left off, from `actor.getPersistedSnapshot()`: state, context,
+   * history and pending timers, with no entry actions run again. Wins over `state` and `context`.
+   */
+  snapshot?: JsonObject
+  /**
    * Events to send before the chart shows: where the story starts. Event types, space-separated, or a JSON array
    * of types and whole events, `[{"type":"xstate.done.actor.pay","output":42}]`.
    */
@@ -71,11 +84,22 @@ interface StatechartProps {
    */
   // Written out, not EdgeCounts: the embed typings and attribute parsing are generated from this interface alone.
   counts?: Record<string, Record<string, number>>
-  /** right, down, or auto (the default): top to bottom in containers narrower than 520px. */
+  /** right, down, or auto (the default): whichever shows the chart larger in its space. */
   direction?: "auto" | "right" | "down"
 }
 
 const STEP_MS = 1800
+// The height the chart fits itself to when the page sets none: tall enough to read, short enough to scroll past.
+const MIN_HEIGHT = 240
+const MAX_HEIGHT = 720
+const { padding } = COMPACT_FIT
+
+/** The canvas height that shows a `chart`-sized chart at full width (never above 100%), in a `width`-wide element. */
+function fitHeight(chart: { readonly width: number; readonly height: number }, width: number) {
+  const inset = (side: string) => Number.parseFloat(side)
+  const scale = Math.min(1, (width - 2 * inset(padding.x)) / chart.width)
+  return chart.height * scale + inset(padding.top) + inset(padding.bottom)
+}
 // One empty walkthrough for every chart without one: a fresh `[]` per render would re-run the load.
 const NO_STEPS: Array<WalkthroughStep> = []
 const NO_TRAIL: ReadonlyArray<string> = []
@@ -137,12 +161,45 @@ for (const [family, url] of [
 
 const HOST = `:host,[data-mountly-root]{height:100%;-webkit-tap-highlight-color:transparent}button{touch-action:manipulation}`
 
+/**
+ * Whether the page gives the element a height of its own. page.ts sizes it by --autoviz-fit only when the page
+ * doesn't; set that to 1px for a moment and see whether the element follows. Restored before the browser paints.
+ */
+function pageSetsHeight(element: HTMLElement) {
+  const before = element.style.getPropertyValue("--autoviz-fit")
+  element.style.setProperty("--autoviz-fit", "1px")
+  const followed = element.getBoundingClientRect().height <= 1
+  if (before) element.style.setProperty("--autoviz-fit", before)
+  else element.style.removeProperty("--autoviz-fit")
+  return !followed
+}
+
+/** The walkthrough step a deep link (`#<id>/<step>`) names for chart `id`, within its `length` steps, if any. */
+const linkedStep = (id: string | undefined, length: number) => {
+  if (!id || !location.hash.startsWith(`#${id}/`)) return undefined
+  const step = Number(location.hash.slice(id.length + 2))
+  return Number.isInteger(step) ? Math.min(Math.max(step, 0), length) : undefined
+}
+
+const notAccepted = (type: string, before: SimView) =>
+  `"${type}" isn't accepted in state ${before.valueJson.replace(/\s+/g, " ")}`
+
 // WorkerError and DefinitionError are Errors too.
 const errorMessage = (cause: unknown) => (cause instanceof Error ? cause.message : String(cause))
 
-async function sourceFrom(code: string | undefined, src: string | undefined): Promise<string> {
+async function sourceFrom(
+  code: string | undefined,
+  definition: JsonObject | undefined,
+  inPage: boolean,
+  src: string | undefined
+): Promise<string> {
   if (code !== undefined) return code
-  if (src === undefined) throw new Error("Set the code or src attribute.")
+  // The page's engine loads the definition itself; the worker gets it as code, like an imported .json file.
+  if (definition !== undefined)
+    return inPage
+      ? JSON.stringify(definition)
+      : Effect.runPromise(codeFromDefinition(JSON.stringify(definition), "definition.json"))
+  if (src === undefined) throw new Error("Set the code, definition or src attribute.")
   const url = new URL(src, location.href)
   const response = await fetch(url)
   if (!response.ok) throw new Error(`${src}: ${response.status} ${response.statusText}`)
@@ -153,21 +210,37 @@ async function sourceFrom(code: string | undefined, src: string | undefined): Pr
 
 export default function Statechart({
   code,
+  definition,
   src,
   machine,
   theme = "auto",
   input = NO_JSON,
   state,
   context = NO_JSON,
+  snapshot,
   events,
   walkthrough = NO_STEPS,
   autoplay = false,
   counts = NO_COUNTS,
   direction = "auto"
 }: StatechartProps) {
-  // One worker per element: the worker holds a single simulation.
-  const [runtime] = useState(() => ManagedRuntime.make(MachineWorker.layer))
-  useEffect(() => () => void runtime.dispose(), [runtime])
+  // A definition with no code needs no worker: its engine runs on the page. Each element has its own of either, since
+  // an engine holds a single simulation; a layer builds on first use, so the one this chart doesn't use costs nothing.
+  const inPage = code === undefined && definition !== undefined && !carriesCode(definition)
+  // A string, so the effects below compare it by value.
+  const snapshotJson = snapshot === undefined ? undefined : JSON.stringify(snapshot)
+  const [runtimes] = useState(() => ({
+    worker: ManagedRuntime.make(MachineWorker.layer),
+    page: ManagedRuntime.make(MachineWorker.inPage)
+  }))
+  useEffect(
+    () => () => {
+      void runtimes.worker.dispose()
+      void runtimes.page.dispose()
+    },
+    [runtimes]
+  )
+  const runtime = inPage ? runtimes.page : runtimes.worker
 
   const [graph, setGraph] = useState<MachineGraph | undefined>()
   const [index, setIndex] = useState(0)
@@ -178,6 +251,9 @@ export default function Statechart({
   const [error, setError] = useState<string | undefined>()
   const [properties, setProperties] = useState("")
   const anchor = useRef<HTMLDivElement>(null)
+  const canvasBox = useRef<HTMLDivElement>(null)
+  const [chartSize, setChartSize] = useState<{ readonly width: number; readonly height: number }>()
+  const [width, setWidth] = useState(0)
   // replay() runs in the same tick the graph loads, before its state is visible: read the graph from here.
   const graphRef = useRef<MachineGraph | undefined>(undefined)
 
@@ -200,13 +276,29 @@ export default function Statechart({
    * are pure, so replaying from the start is instant, and going back a step is a shorter replay.
    * An event the machine doesn't accept shows an error.
    */
-  const replay = useCallback(
-    async (at: number, count: number) => {
+  // One engine holds one simulation: a replay is a start and a run of sends, so two at once would interleave. Queue
+  // them, and the SVG export, which replays too. `shownStep` is the step the last finished replay left showing.
+  const queue = useRef<Promise<void>>(Promise.resolve())
+  const serially = useCallback(<A,>(task: () => Promise<A>) => {
+    const done = queue.current.then(task)
+    queue.current = done.then(
+      () => undefined,
+      () => undefined
+    )
+    return done
+  }, [])
+  const shownStep = useRef(0)
+  // Events sent by clicking the chart since that replay: an export puts them back after it.
+  const clicked = useRef<ReadonlyArray<string>>([])
+
+  // Unqueued: only for a task already holding the queue. Everything else calls replay.
+  const replayNow = useCallback(
+    async (at: number, count: number, extra: ReadonlyArray<string> = []) => {
       const opening = await run(eventsFrom(events ?? ""))
       if (opening === undefined) return
       const sends = [...opening, ...walkthrough.slice(0, count).map(eventOf)]
       const start = (worker: MachineWorker["Service"]) =>
-        worker.start(at, JSON.stringify(input), state, JSON.stringify(context))
+        worker.start(at, JSON.stringify(input), state, JSON.stringify(context), snapshotJson)
       let view = (await run(MachineWorker.use(start)))?.view
       const path = new Set<string>()
       for (const event of sends) {
@@ -214,17 +306,28 @@ export default function Statechart({
         const before = view
         view = (await run(MachineWorker.use((worker) => worker.send(JSON.stringify(event)))))?.view
         if (view !== undefined && !view.handled) {
-          setError(`"${event.type}" isn't accepted in state ${before.valueJson.replace(/\s+/g, " ")}`)
+          setError(notAccepted(event.type, before))
           return
         }
         if (view !== undefined && graphRef.current !== undefined)
           for (const id of takenEdges(graphRef.current, view.taken)) path.add(id)
       }
+      // Clicked events were accepted when clicked, and transitions are pure, so they are again.
+      for (const eventJson of extra) {
+        if (view === undefined) return
+        view = (await run(MachineWorker.use((worker) => worker.send(eventJson))))?.view
+      }
       setSim(view)
       setTaken(path)
       setStep(count)
+      shownStep.current = count
+      clicked.current = extra
     },
-    [run, input, state, context, events, walkthrough]
+    [run, input, state, context, snapshotJson, events, walkthrough]
+  )
+  const replay = useCallback(
+    (at: number, count: number, extra: ReadonlyArray<string> = []) => serially(() => replayNow(at, count, extra)),
+    [serially, replayNow]
   )
 
   // The custom element in the page, whose id names this chart in deep links: #<id>/<step>.
@@ -232,6 +335,20 @@ export default function Statechart({
     const root = anchor.current?.getRootNode()
     return root instanceof ShadowRoot ? root.host.parentElement : null
   }
+  /**
+   * The space `direction="auto"` compares layouts in: the canvas's width, and its height when the page sets one. When
+   * it doesn't, the element grows to fit the chart (up to MAX_HEIGHT), so that is the height to fit in.
+   */
+  const fitArea = useCallback(() => {
+    const box = canvasBox.current
+    const element = host()
+    if (box === null) return { width: 0, height: 0 }
+    return {
+      width: box.clientWidth,
+      height: element !== null && pageSetsHeight(element) ? box.clientHeight : MAX_HEIGHT
+    }
+  }, [])
+
   const go = (count: number) => {
     void replay(index, count)
     const id = host()?.id
@@ -241,7 +358,7 @@ export default function Statechart({
   useEffect(() => {
     let cancelled = false
     setError(undefined)
-    void sourceFrom(code, src)
+    void sourceFrom(code, definition, inPage, src)
       // A replaced load must not reach the worker: it would swap the machine under the new diagram.
       .then((source) => (cancelled ? undefined : run(MachineWorker.use((worker) => worker.load(source)))))
       .then(async (loaded) => {
@@ -256,15 +373,85 @@ export default function Statechart({
         setIndex(found)
         setSelected(undefined)
         // A deep link (#<id>/<step>) opens the walkthrough at that step.
-        const id = host()?.id
-        const linked = id && location.hash.startsWith(`#${id}/`) ? Number(location.hash.slice(id.length + 2)) : 0
-        await replay(found, Number.isInteger(linked) ? Math.min(Math.max(linked, 0), walkthrough.length) : 0)
+        await replay(found, linkedStep(host()?.id, walkthrough.length) ?? 0)
       })
       .catch((cause: unknown) => !cancelled && setError(errorMessage(cause)))
     return () => {
       cancelled = true
     }
-  }, [code, src, machine, run, replay, walkthrough.length])
+  }, [code, definition, inPage, src, machine, run, replay, walkthrough.length])
+
+  /**
+   * `element.toAnimatedSvg()`: the walkthrough as one self-contained SVG that steps through itself with CSS, for
+   * places that can't run the element, such as a README. A docs build calls it from a headless browser. Each frame's
+   * caption is the step's event and note. Afterwards the chart shows the step it showed before.
+   */
+  useEffect(() => {
+    const element = host()
+    if (element === null || graph === undefined) return
+    const toAnimatedSvg = async (options: { title?: string; stepMs?: number; direction?: "right" | "down" } = {}) => {
+      const opening = await Effect.runPromise(eventsFrom(events ?? ""))
+      // Queued behind any replay in flight (the first one starts as the chart loads). The restore runs in the same
+      // turn, so a click queued meanwhile meets the state the chart shows, not the export's last frame.
+      const views = await serially(() =>
+        runtime
+          .runPromise(
+            MachineWorker.use((worker) =>
+              Effect.gen(function* () {
+                const first = yield* worker.start(
+                  index,
+                  JSON.stringify(input),
+                  state,
+                  JSON.stringify(context),
+                  snapshotJson
+                )
+                let view = first.view
+                // The same check as replay: an event the machine doesn't accept fails the export.
+                const send = (event: { readonly type: string }) =>
+                  worker
+                    .send(JSON.stringify(event))
+                    .pipe(
+                      Effect.flatMap(({ view: next }) =>
+                        next.handled ? Effect.succeed(next) : Effect.fail(new Error(notAccepted(event.type, view)))
+                      )
+                    )
+                for (const event of opening) view = yield* send(event)
+                const shown = [view]
+                for (const walk of walkthrough) {
+                  view = yield* send(eventOf(walk))
+                  shown.push(view)
+                }
+                return shown
+              })
+            )
+          )
+          .finally(() => replayNow(index, shownStep.current, clicked.current))
+      )
+      const captions = [
+        "start",
+        ...walkthrough.map((walk) => `${eventOf(walk).type}${walk.note ? `: ${walk.note}` : ""}`)
+      ]
+      const frames = views.map((view, i) => ({ active: view.active, caption: captions[i] ?? "" }))
+      const laid = await layout(graph, options.direction === "down" ? "DOWN" : "RIGHT", false)
+      return toSvg(laid, frames, { title: options.title ?? `${graph.id} statechart`, stepMs: options.stepMs })
+    }
+    Object.assign(element, { toAnimatedSvg })
+    return () => void Reflect.deleteProperty(element, "toAnimatedSvg")
+  }, [graph, index, runtime, serially, events, input, state, context, snapshotJson, walkthrough, replayNow])
+
+  // A deep link followed on the page already showing the chart moves it too. go() writes the hash with
+  // replaceState, which fires no hashchange, so stepping doesn't loop back here.
+  useEffect(() => {
+    if (graph === undefined) return
+    const follow = () => {
+      const linked = linkedStep(host()?.id, walkthrough.length)
+      if (linked === undefined) return
+      setPlaying(false)
+      void replay(index, linked)
+    }
+    addEventListener("hashchange", follow)
+    return () => removeEventListener("hashchange", follow)
+  }, [graph, index, replay, walkthrough.length])
 
   // Autoplay: one step at a time, stopping at the end.
   useEffect(() => {
@@ -286,11 +473,35 @@ export default function Statechart({
     () => ({
       active: new Set(sim?.active ?? []),
       enabled: new Set(sim?.nextEvents.map((event) => event.eventJson) ?? []),
+      // Queued like replays, so a click never lands inside an export's run of events.
       send: (eventJson) =>
-        void run(MachineWorker.use((worker) => worker.send(eventJson))).then((result) => result && setSim(result.view))
+        void serially(async () => {
+          const result = await run(MachineWorker.use((worker) => worker.send(eventJson)))
+          if (result === undefined) return
+          setSim(result.view)
+          if (result.view.handled) clicked.current = [...clicked.current, eventJson]
+        })
     }),
-    [sim, run]
+    [sim, run, serially]
   )
+
+  useEffect(() => {
+    const element = anchor.current
+    if (element === null) return
+    const observer = new ResizeObserver(() => setWidth(element.clientWidth))
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [])
+
+  // Size the element to the chart, unless the page sets a height (page.ts reads --autoviz-fit).
+  useEffect(() => {
+    const element = host()
+    if (element === null || chartSize === undefined || width === 0 || anchor.current === null) return
+    // The walkthrough bar and anything else under the canvas.
+    const below = anchor.current.clientHeight - (canvasBox.current?.clientHeight ?? 0)
+    const canvas = Math.min(MAX_HEIGHT, Math.max(MIN_HEIGHT, fitHeight(chartSize, width)))
+    element.style.setProperty("--autoviz-fit", `${Math.round(canvas + below)}px`)
+  }, [chartSize, width, walkthrough.length])
 
   const edgeCounts = useMemo(() => (graph === undefined ? undefined : countsByEdge(graph, counts)), [graph, counts])
   const current = walkthrough[step - 1]
@@ -304,7 +515,7 @@ export default function Statechart({
         </p>
       ) : graph === undefined ? null : (
         <TooltipProvider delayDuration={300}>
-          <div className="relative min-h-0 flex-1">
+          <div ref={canvasBox} className="relative min-h-0 flex-1">
             <Canvas
               graph={graph}
               simulation={simulation}
@@ -313,13 +524,11 @@ export default function Statechart({
               trail={NO_TRAIL}
               onReset={() => go(0)}
               compact
-              initialDirection={
-                direction === "down" || (direction === "auto" && (anchor.current?.clientWidth ?? 1000) < 520)
-                  ? "DOWN"
-                  : "RIGHT"
-              }
+              initialDirection={direction === "down" ? "DOWN" : direction === "right" ? "RIGHT" : "AUTO"}
+              fitArea={fitArea}
               counts={edgeCounts}
               taken={taken}
+              onLayout={setChartSize}
             />
           </div>
           {walkthrough.length > 0 && (
