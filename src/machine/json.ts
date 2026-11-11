@@ -8,6 +8,11 @@ export const isString = Schema.is(Schema.String)
 export const isJsonArray = Schema.is(Schema.Array(Schema.Json))
 export const isJsonObject = Schema.is(Schema.Record(Schema.String, Schema.Json))
 
+/** An event as JSON: a `type`, and any data beside it. */
+export const JsonEvent = Schema.StructWithRest(Schema.Struct({ type: Schema.String }), [
+  Schema.Record(Schema.String, Schema.Json)
+])
+
 export const field = (value: Json | undefined, key: string): Json | undefined =>
   isJsonObject(value) ? value[key] : undefined
 

@@ -103,6 +103,93 @@ test.describe("The <auto-visualizer> embed", () => {
     await expect(page.locator("#wrong").getByRole("alert")).toHaveText('"NOPE" isn\'t accepted in state "off"')
   })
 
+  test("opens in a named state with input and context, and walks through events that carry data", async ({
+    page,
+    baseURL
+  }) => {
+    const COUNTER = `import { createMachine } from "xstate"
+export const counter = createMachine({
+  id: "counter",
+  initial: "idle",
+  context: ({ input }) => ({ count: input.start, step: 1 }),
+  states: {
+    idle: { on: { START: { target: "running" } } },
+    running: {
+      on: {
+        ADD: ({ context, event }) => ({ context: { ...context, count: context.count + event.by } }),
+        CHECK: ({ context }) => (context.count === 13 && context.step === 5 ? { target: "right" } : { target: "wrong" })
+      }
+    },
+    right: {},
+    wrong: {}
+  }
+})`
+    await docsPage(
+      page,
+      baseURL,
+      `<auto-visualizer id="opened" state="running" input='{"start":10}' context='{"step":5}' style="height: 300px"
+         walkthrough='[{"event":{"type":"ADD","by":3},"note":"add three"},{"event":"CHECK"}]'>
+         <script type="text/typescript">${COUNTER}</script>
+       </auto-visualizer>
+       <auto-visualizer id="sent" events='["START",{"type":"ADD","by":3},"CHECK"]' input='{"start":10}'
+         context='{"step":5}' style="height: 300px">
+         <script type="text/typescript">${COUNTER}</script>
+       </auto-visualizer>
+       <auto-visualizer id="garbled" events='[{"by":3}]' input='{"start":10}' style="height: 120px">
+         <script type="text/typescript">${COUNTER}</script>
+       </auto-visualizer>
+       <auto-visualizer id="lost" state="nowhere" style="height: 120px">
+         <script type="text/typescript">${COUNTER}</script>
+       </auto-visualizer>`
+    )
+
+    const chart = page.locator("#opened")
+    await expect(chart.getByRole("group", { name: "running", exact: true })).toHaveAttribute("aria-current", "true")
+    const bar = chart.getByRole("group", { name: "Walkthrough" })
+    await bar.getByRole("button", { name: "Next step" }).click()
+    await expect(bar).toContainText("ADD: add three")
+    // count: input 10 + 3 from the event; step: 5 from the context attribute.
+    await bar.getByRole("button", { name: "Next step" }).click()
+    await expect(chart.getByRole("group", { name: "right", exact: true })).toHaveAttribute("aria-current", "true")
+
+    // events as JSON: names and whole events, sent before the chart shows.
+    await expect(page.locator("#sent").getByRole("group", { name: "right", exact: true })).toHaveAttribute(
+      "aria-current",
+      "true"
+    )
+    await expect(page.locator("#garbled").getByRole("alert")).toContainText(
+      "The events attribute isn't a list of events"
+    )
+
+    await expect(page.locator("#lost").getByRole("alert")).toContainText(
+      'No state "nowhere" in counter. Its states: idle, running, right, wrong'
+    )
+  })
+
+  test("shows how often each event was taken, and the path a walkthrough took", async ({ page, baseURL }) => {
+    await docsPage(
+      page,
+      baseURL,
+      `<auto-visualizer id="counted" direction="down" style="height: 400px"
+         counts='{"off":{"TOGGLE":35},"toggle.on":{"TOGGLE":0}}'
+         walkthrough='[{"event":"TOGGLE","note":"switch it on"}]'>
+         <script type="text/typescript">${TOGGLE}</script>
+       </auto-visualizer>`
+    )
+
+    const chart = page.locator("#counted")
+    // Counts match by state key (off) or full id (toggle.on), and read out with the event.
+    const turnOn = chart.getByRole("button", { name: /^TOGGLE, taken 35 times/ })
+    const turnOff = chart.getByRole("button", { name: /^TOGGLE, taken 0 times/ })
+    await expect(turnOn).toContainText("35")
+    await expect(turnOff).toContainText("0")
+    await expect(turnOn).not.toHaveAccessibleName(/on the replayed path/)
+
+    await chart.getByRole("group", { name: "Walkthrough" }).getByRole("button", { name: "Next step" }).click()
+    await expect(turnOn).toHaveAccessibleName(/on the replayed path/)
+    await expect(turnOff).not.toHaveAccessibleName(/on the replayed path/)
+  })
+
   test.describe("on a phone", () => {
     test.use({ viewport: { width: 390, height: 800 }, hasTouch: true, isMobile: true })
 

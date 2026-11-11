@@ -10,6 +10,7 @@ import { machineToJSON } from "xstate"
 import { codeFromDefinition } from "./definition"
 import { toMachineGraph, unreachableStates } from "./graph"
 import { start, step, view } from "./simulate"
+import { takenEdges } from "../canvas/overlay"
 
 const example = (name: string) => readFileSync(join(__dirname, "..", "examples", `${name}.ts`), "utf8")
 const load = (code: string) =>
@@ -158,5 +159,144 @@ describe("MachineJSON round trip", () => {
   it("a file that is not a JSON object is a DefinitionError", async () => {
     const exit = await Effect.runPromiseExit(codeFromDefinition("[1, 2]", "bad.json"))
     expect(JSON.stringify(exit)).toContain("DefinitionError")
+  })
+})
+
+describe("taken transitions", () => {
+  const taken = async (code: string, type: string) => {
+    const [machine] = await load(`import { createMachine } from 'xstate'\n${code}`)
+    const [, , trace] = step(machine!, start(machine!, {}), { type })
+    const graph = toMachineGraph(machine!, undefined)
+    const ids = takenEdges(graph, trace)
+    return graph.edges.filter((e) => ids.includes(e.id)).map((e) => `${e.source} -> ${e.target}`)
+  }
+
+  it("includes eventless transitions taken after the event", async () => {
+    expect(
+      await taken(
+        `createMachine({ id: 'm', initial: 'a', states: { a: { on: { GO: { target: 'b' } } }, b: { always: { target: 'c' } }, c: {} } })`,
+        "GO"
+      )
+    ).toEqual(["m.a -> m.b", "m.b -> m.c"])
+  })
+
+  it("leaves out a parent's transition when a child handles the event", async () => {
+    expect(
+      await taken(
+        `createMachine({ id: 'm', initial: 'p', states: { p: { on: { GO: {} }, initial: 'x', states: { x: { on: { GO: { target: 'y' } } }, y: {} } } } })`,
+        "GO"
+      )
+    ).toEqual(["m.p.x -> m.p.y"])
+  })
+
+  it("finds a transition function's edge", async () => {
+    expect(
+      await taken(
+        `createMachine({ id: 'm', initial: 'a', states: { a: { on: { GO: () => ({ target: 'b' }) } }, b: {} } })`,
+        "GO"
+      )
+    ).toEqual(["m.a -> m.b"])
+  })
+
+  it("keeps a function's branch into a state an eventless transition then leaves", async () => {
+    expect(
+      await taken(
+        `createMachine({ id: 'm', initial: 'a', context: { ok: true }, states: {
+          a: { on: { GO: ({ context }) => context.ok ? { target: 'b' } : { target: 'd' } } },
+          b: { always: { target: 'c' } }, c: {}, d: {} } })`,
+        "GO"
+      )
+    ).toEqual(["m.a -> m.b", "m.b -> m.c"])
+  })
+
+  it("runs a transition function once per event, and the trace matches the snapshot", async () => {
+    const [machine] = await load(`import { createMachine } from 'xstate'
+      let calls = 0
+      createMachine({ id: 'm', initial: 'a', states: {
+        a: { on: { GO: () => (++calls === 1 ? { target: 'b' } : { target: 'c' }) } }, b: {}, c: {} } })`)
+    const [next, , trace] = step(machine!, start(machine!, {}), { type: "GO" })
+    expect(next.value).toBe("b")
+    expect(trace).toEqual([{ transition: "m.a:0", targets: ["m.b"] }])
+  })
+})
+
+describe("start", () => {
+  const machine = () =>
+    load(`import { createMachine } from 'xstate'
+      createMachine({ id: 'm', initial: 'a', context: ({ input }) => ({ n: input?.n ?? 0, k: 1 }), states: {
+        a: { on: { GO: { target: 'p' } } },
+        p: { type: 'parallel', states: {
+          x: { initial: 'x1', states: { x1: { on: { GO: { target: 'x2' } } }, x2: {} } },
+          y: { initial: 'y1', states: { y1: {}, y2: {} } } } } } })`).then(([m]) => m!)
+
+  it("opens at the initial state with the input", async () => {
+    const snapshot = start(await machine(), { n: 5 })
+    expect([snapshot.value, snapshot.context]).toEqual(["a", { n: 5, k: 1 }])
+  })
+
+  it("opens in a state named by path or full id, one per parallel region, with context laid over", async () => {
+    const m = await machine()
+    expect(start(m, {}, "p.x.x2 m.p.y.y2", { k: 9 })).toMatchObject({
+      value: { p: { x: "x2", y: "y2" } },
+      context: { n: 0, k: 9 }
+    })
+    // A compound state opens at its initial children, and events go on from there.
+    const [next] = step(m, start(m, {}, "p"), { type: "GO" })
+    expect(next.value).toEqual({ p: { x: "x2", y: "y1" } })
+  })
+
+  it("doesn't run the initial route when a state is named", async () => {
+    const [m] = await load(`import { createMachine } from 'xstate'
+      createMachine({ id: 'm', initial: 'a', context: ({ input }) => ({ n: input.n }), states: {
+        a: { entry: ({ context }) => ({ context: { ...context, n: 7 } }), always: () => ({ target: 'b', context: { n: 99 } }) },
+        b: {}, c: {} } })`)
+    expect(start(m!, { n: 0 }, "c")).toMatchObject({ value: "c", context: { n: 0 } })
+    expect(start(m!, { n: 0 }, "c", { k: 1 }).context).toEqual({ n: 0, k: 1 })
+    // Without a state the machine starts as usual, route and all.
+    expect(start(m!, { n: 0 }).context).toEqual({ n: 99 })
+  })
+
+  it("enters a named state as if it were initial: entry actions, eventless transitions and done events run", async () => {
+    const [m] = await load(`import { createMachine } from 'xstate'
+      createMachine({ id: 'm', initial: 'a', context: { n: 0 }, states: {
+        a: {},
+        p: { initial: 'a', onDone: { target: 'd' }, states: {
+          a: {}, b: { entry: ({ context }) => ({ context: { n: context.n + 5 } }), always: { target: 'c' } }, c: { type: 'final' } } },
+        d: {} } })`)
+    expect(start(m!, {}, "p.b")).toMatchObject({ value: "d", context: { n: 5 } })
+    // Context is laid over before the machine starts, so entry actions see it.
+    expect(start(m!, {}, "p.b", { n: 10 }).context).toEqual({ n: 15 })
+  })
+
+  it("sends no event to open in a state, so wildcard handlers don't run", async () => {
+    const [m] = await load(`import { createMachine } from 'xstate'
+      createMachine({ id: 'm', initial: 'a', on: { '*': ({ event }) => ({ context: { n: event.payload.n } }) },
+        states: { a: {}, b: {} } })`)
+    expect(start(m!, {}, "b").value).toBe("b")
+  })
+
+  it("lays context over the initial state when no state is named", async () => {
+    expect(start(await machine(), { n: 2 }, "", { k: 3 })).toMatchObject({ value: "a", context: { n: 2, k: 3 } })
+  })
+
+  it("names the machine's states when the state is unknown", async () => {
+    const m = await machine()
+    expect(() => start(m, {}, "nope")).toThrow(
+      'No state "nope" in m. Its states: a, p, p.x, p.x.x1, p.x.x2, p.y, p.y.y1, p.y.y2'
+    )
+  })
+})
+
+describe("start keeps history", () => {
+  it("restores a history state recorded while opening in a named state", async () => {
+    const [m] = await load(`import { createMachine } from 'xstate'
+      createMachine({ id: 'm', initial: 'p', context: { leave: true }, states: {
+        p: { initial: 'a', states: {
+          a: {}, b: { always: ({ context }) => (context.leave ? { target: '#m.q' } : undefined) }, h: { type: 'history', target: 'a' } } },
+        q: { entry: () => ({ context: { leave: false } }), on: { BACK: { target: 'p.h' } } } } })`)
+    for (const opened of [start(m!, {}, "p.b"), start(m!, {}, "p.b", { n: 1 })]) {
+      expect(opened.value).toBe("q")
+      expect(step(m!, opened, { type: "BACK" })[0].value).toEqual({ p: "b" })
+    }
   })
 })

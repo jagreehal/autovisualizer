@@ -15,6 +15,7 @@ export const SIZE = {
   diamond: 18,
   kindIcon: 14,
   finalIcon: 20,
+  countPadX: 7,
   regionPad: 28
 } as const
 
@@ -22,7 +23,8 @@ export const FONT = {
   state: "600 20px 'Geist Variable'",
   parent: "600 16px 'Geist Variable'",
   pill: "600 14px 'Geist Variable'",
-  chip: "500 12px 'Geist Mono Variable'"
+  chip: "500 12px 'Geist Mono Variable'",
+  count: "600 12px 'Geist Mono Variable'"
 } as const
 
 export interface Rect extends Point {

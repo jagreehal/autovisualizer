@@ -7,22 +7,28 @@ import "@/styles.css"
 import sansUrl from "@fontsource-variable/geist/files/geist-latin-wght-normal.woff2?url"
 import monoUrl from "@fontsource-variable/geist-mono/files/geist-mono-latin-wght-normal.woff2?url"
 
-import { Effect, ManagedRuntime } from "effect"
+import { Effect, ManagedRuntime, Schema } from "effect"
 import { ChevronLeftIcon, ChevronRightIcon, PauseIcon, PlayIcon } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
 import { Canvas } from "@/canvas/Canvas"
+import { countsByEdge, takenEdges } from "@/canvas/overlay"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { MachineWorker } from "@/machine/client"
+import { isString, JsonEvent } from "@/machine/json"
 import { codeFromDefinition } from "@/machine/definition"
 
 import type { Simulation } from "@/canvas/Canvas"
 import type { MachineGraph } from "@/machine/graph"
 import type { SimView } from "@/machine/simulate"
 
+// Written out, not imported: the embed typings are generated from this file alone.
+type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue }
+type JsonObject = { [key: string]: JsonValue }
+
 interface WalkthroughStep {
-  /** The event type to send. */
-  event: string
+  /** The event to send: its type, or the whole event when it carries data, `{"type":"xstate.done.actor.pay","output":42}`. */
+  event: string | { type: string; [key: string]: JsonValue }
   /** What this step shows, under the chart. */
   note?: string
 }
@@ -36,18 +42,64 @@ interface StatechartProps {
   machine?: string
   /** light, dark, or auto to follow the reader's system setting. Defaults to auto. */
   theme?: "light" | "dark" | "auto"
-  /** Event types to send before the chart shows, space-separated: where the story starts. */
+  /** The machine's input, as JSON. */
+  input?: JsonObject
+  /**
+   * The state to open in, as its path (`payment.processing`) or full id. In parallel states, name one state per
+   * region, space-separated. The machine starts as if its initial states led there: the usual initial route is
+   * skipped, but entry actions, eventless transitions and done events run, so a state that passes straight
+   * through opens where it lands.
+   */
+  state?: string
+  /**
+   * Context to start with, as JSON, laid over the machine's own. It's set before the machine starts, so guards see
+   * it and entry actions can still change it. Works with or without `state`.
+   */
+  context?: JsonObject
+  /**
+   * Events to send before the chart shows: where the story starts. Event types, space-separated, or a JSON array
+   * of types and whole events, `[{"type":"xstate.done.actor.pay","output":42}]`.
+   */
   events?: string
   /** Steps to walk through, each an event and a note. Adds step controls under the chart. */
   walkthrough?: Array<WalkthroughStep>
   /** Step through the walkthrough on its own. Off for readers who ask for less motion. */
   autoplay?: boolean
+  /**
+   * How often each transition was taken, by state then event: `{"payment":{"PAID":120,"DECLINED":0}}`. Each count
+   * shows on its event, and a transition taken 0 times is drawn dashed. A state is its key or its full id.
+   */
+  // Written out, not EdgeCounts: the embed typings and attribute parsing are generated from this interface alone.
+  counts?: Record<string, Record<string, number>>
+  /** right, down, or auto (the default): top to bottom in containers narrower than 520px. */
+  direction?: "auto" | "right" | "down"
 }
 
 const STEP_MS = 1800
 // One empty walkthrough for every chart without one: a fresh `[]` per render would re-run the load.
 const NO_STEPS: Array<WalkthroughStep> = []
 const NO_TRAIL: ReadonlyArray<string> = []
+const NO_COUNTS: Record<string, Record<string, number>> = {}
+const NO_JSON: JsonObject = {}
+const eventOf = (step: WalkthroughStep) => (isString(step.event) ? { type: step.event } : step.event)
+
+const decodeEvents = Schema.decodeUnknownEffect(
+  Schema.fromJsonString(Schema.Array(Schema.Union([Schema.String, JsonEvent])))
+)
+
+/** `events` as names (`ADD_ITEM CHECKOUT`), or as a JSON array of names and whole events. */
+const eventsFrom = (events: string) =>
+  events.trimStart().startsWith("[")
+    ? decodeEvents(events).pipe(
+        Effect.map((list) => list.map((event) => (isString(event) ? { type: event } : event))),
+        Effect.mapError((cause) => new Error(`The events attribute isn't a list of events: ${cause.message}`))
+      )
+    : Effect.succeed(
+        events
+          .split(/\s+/)
+          .filter(Boolean)
+          .map((type) => ({ type }))
+      )
 
 /** Follow a media query, such as the reader's colour scheme. */
 function useMedia(query: string) {
@@ -104,9 +156,14 @@ export default function Statechart({
   src,
   machine,
   theme = "auto",
+  input = NO_JSON,
+  state,
+  context = NO_JSON,
   events,
   walkthrough = NO_STEPS,
-  autoplay = false
+  autoplay = false,
+  counts = NO_COUNTS,
+  direction = "auto"
 }: StatechartProps) {
   // One worker per element: the worker holds a single simulation.
   const [runtime] = useState(() => ManagedRuntime.make(MachineWorker.layer))
@@ -117,9 +174,12 @@ export default function Statechart({
   const [sim, setSim] = useState<SimView | undefined>()
   const [step, setStep] = useState(0)
   const [selected, setSelected] = useState<string | undefined>()
+  const [taken, setTaken] = useState<ReadonlySet<string>>(new Set())
   const [error, setError] = useState<string | undefined>()
   const [properties, setProperties] = useState("")
   const anchor = useRef<HTMLDivElement>(null)
+  // replay() runs in the same tick the graph loads, before its state is visible: read the graph from here.
+  const graphRef = useRef<MachineGraph | undefined>(undefined)
 
   const prefersDark = useMedia("(prefers-color-scheme: dark)")
   const reducedMotion = useMedia("(prefers-reduced-motion: reduce)")
@@ -142,21 +202,29 @@ export default function Statechart({
    */
   const replay = useCallback(
     async (at: number, count: number) => {
-      const types = [...(events ?? "").split(/\s+/).filter(Boolean), ...walkthrough.slice(0, count).map((s) => s.event)]
-      let view = (await run(MachineWorker.use((worker) => worker.start(at, "{}"))))?.view
-      for (const type of types) {
+      const opening = await run(eventsFrom(events ?? ""))
+      if (opening === undefined) return
+      const sends = [...opening, ...walkthrough.slice(0, count).map(eventOf)]
+      const start = (worker: MachineWorker["Service"]) =>
+        worker.start(at, JSON.stringify(input), state, JSON.stringify(context))
+      let view = (await run(MachineWorker.use(start)))?.view
+      const path = new Set<string>()
+      for (const event of sends) {
         if (view === undefined) return
         const before = view
-        view = (await run(MachineWorker.use((worker) => worker.send(JSON.stringify({ type })))))?.view
+        view = (await run(MachineWorker.use((worker) => worker.send(JSON.stringify(event)))))?.view
         if (view !== undefined && !view.handled) {
-          setError(`"${type}" isn't accepted in state ${before.valueJson.replace(/\s+/g, " ")}`)
+          setError(`"${event.type}" isn't accepted in state ${before.valueJson.replace(/\s+/g, " ")}`)
           return
         }
+        if (view !== undefined && graphRef.current !== undefined)
+          for (const id of takenEdges(graphRef.current, view.taken)) path.add(id)
       }
       setSim(view)
+      setTaken(path)
       setStep(count)
     },
-    [run, events, walkthrough]
+    [run, input, state, context, events, walkthrough]
   )
 
   // The custom element in the page, whose id names this chart in deep links: #<id>/<step>.
@@ -183,6 +251,7 @@ export default function Statechart({
           const ids = loaded.machines.map((graph) => graph.id).join(", ")
           return setError(`No machine "${machine}" here. The code creates: ${ids}`)
         }
+        graphRef.current = loaded.machines[found]
         setGraph(loaded.machines[found])
         setIndex(found)
         setSelected(undefined)
@@ -223,6 +292,7 @@ export default function Statechart({
     [sim, run]
   )
 
+  const edgeCounts = useMemo(() => (graph === undefined ? undefined : countsByEdge(graph, counts)), [graph, counts])
   const current = walkthrough[step - 1]
 
   return (
@@ -243,7 +313,13 @@ export default function Statechart({
               trail={NO_TRAIL}
               onReset={() => go(0)}
               compact
-              initialDirection={(anchor.current?.clientWidth ?? 1000) < 520 ? "DOWN" : "RIGHT"}
+              initialDirection={
+                direction === "down" || (direction === "auto" && (anchor.current?.clientWidth ?? 1000) < 520)
+                  ? "DOWN"
+                  : "RIGHT"
+              }
+              counts={edgeCounts}
+              taken={taken}
             />
           </div>
           {walkthrough.length > 0 && (
@@ -292,14 +368,18 @@ export default function Statechart({
               </span>
               <p
                 aria-live="polite"
-                title={current === undefined ? undefined : `${current.event}${current.note ? `: ${current.note}` : ""}`}
+                title={
+                  current === undefined
+                    ? undefined
+                    : `${eventOf(current).type}${current.note ? `: ${current.note}` : ""}`
+                }
                 className="ml-3 line-clamp-2 min-w-0"
               >
                 {current === undefined ? (
                   <span className="text-muted-foreground">Start. Press next to send the first event.</span>
                 ) : (
                   <>
-                    <span className="font-semibold">{current.event}</span>
+                    <span className="font-semibold">{eventOf(current).type}</span>
                     {current.note && <span className="text-muted-foreground">: {current.note}</span>}
                   </>
                 )}

@@ -6,7 +6,14 @@ import { SimView } from "./simulate"
 
 export const Request = Schema.Union([
   Schema.TaggedStruct("Load", { id: Schema.Number, code: Schema.String }),
-  Schema.TaggedStruct("Start", { id: Schema.Number, machine: Schema.Number, inputJson: Schema.String }),
+  Schema.TaggedStruct("Start", {
+    id: Schema.Number,
+    machine: Schema.Number,
+    inputJson: Schema.String,
+    /** Space-separated states to open in; empty for the initial state. */
+    state: Schema.String,
+    contextJson: Schema.String
+  }),
   Schema.TaggedStruct("Send", { id: Schema.Number, eventJson: Schema.String })
 ])
 export type Request = typeof Request.Type

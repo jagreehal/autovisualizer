@@ -57,6 +57,10 @@ interface CanvasState extends Simulation {
   readonly tool: Tool
   readonly selected: string | undefined
   readonly compact: boolean
+  /** How often each edge was taken, by edge id, when the page passed counts. */
+  readonly counts: ReadonlyMap<string, number>
+  /** Edges the replayed events took, drawn as the path so far. */
+  readonly taken: ReadonlySet<string>
 }
 
 const CanvasContext = createContext<CanvasState>({
@@ -65,7 +69,9 @@ const CanvasContext = createContext<CanvasState>({
   send: () => {},
   tool: "simulate",
   selected: undefined,
-  compact: false
+  compact: false,
+  counts: new Map(),
+  taken: new Set()
 })
 
 interface FlagProps {
@@ -290,11 +296,15 @@ function PillIcon({ edge }: { readonly edge: StateGraphEdge }) {
 }
 
 function TransitionEdgeView({ id, data }: EdgeProps<TransitionFlowEdge>) {
-  const { active, enabled, send, tool } = use(CanvasContext)
+  const { active, enabled, send, tool, counts, taken } = use(CanvasContext)
   if (data === undefined) return null
   const { edge, points, label } = data
   const live = active.has(edge.source)
-  const isDimmed = active.size > 0 && !live
+  const count = counts.get(edge.id)
+  const isTaken = taken.has(edge.id)
+  // A transition the counts say nobody took: a path the code allows that real runs never followed.
+  const isUnused = count === 0
+  const isDimmed = active.size > 0 && !live && !isTaken
   const canSend = tool === "simulate" && live && edge.eventJson !== undefined && enabled.has(edge.eventJson)
   const path = roundedPath(points)
   return (
@@ -306,9 +316,9 @@ function TransitionEdgeView({ id, data }: EdgeProps<TransitionFlowEdge>) {
         path={path}
         markerEnd="url(#sc-arrow)"
         style={{
-          stroke: "var(--sc-edge)",
-          strokeWidth: 2,
-          strokeDasharray: edge.inferred ? "6 5" : undefined
+          stroke: isTaken ? "var(--sc-active)" : "var(--sc-edge)",
+          strokeWidth: isTaken ? 3 : 2,
+          strokeDasharray: isUnused ? "2 5" : edge.inferred ? "6 5" : undefined
         }}
       />
       <EdgeLabelRenderer>
@@ -317,7 +327,13 @@ function TransitionEdgeView({ id, data }: EdgeProps<TransitionFlowEdge>) {
         <button
           type="button"
           disabled={!canSend}
-          aria-label={edge.branch === undefined ? edge.label : `${edge.label} (branch ${edge.branch})`}
+          aria-label={[
+            edge.branch === undefined ? edge.label : `${edge.label} (branch ${edge.branch})`,
+            count === undefined ? undefined : `taken ${count.toLocaleString()} times`,
+            isTaken ? "on the replayed path" : undefined
+          ]
+            .filter(Boolean)
+            .join(", ")}
           onClick={() => edge.eventJson !== undefined && send(edge.eventJson)}
           title={edge.inferred ? "Target read from a transition function" : edge.eventJson}
           className={cn(
@@ -325,7 +341,11 @@ function TransitionEdgeView({ id, data }: EdgeProps<TransitionFlowEdge>) {
             "bg-sc-pill text-sm",
             fade,
             // Dim by colour, not opacity: the pill sits on its line and must hide it.
-            isDimmed ? "border-sc-node-border/55 text-sc-pill-fg/60" : "border-sc-node-border text-sc-pill-fg",
+            isDimmed || isUnused
+              ? "border-sc-node-border/55 text-sc-pill-fg/60"
+              : "border-sc-node-border text-sc-pill-fg",
+            isTaken && "border-sc-active",
+            isUnused && "border-dashed",
             edge.kind === "always" && "italic",
             edge.inferred && "border-dashed",
             // Sendable now: a thin blue line just outside the pill.
@@ -341,6 +361,15 @@ function TransitionEdgeView({ id, data }: EdgeProps<TransitionFlowEdge>) {
         >
           <PillIcon edge={edge} />
           {edge.label}
+          {count !== undefined && (
+            <span
+              aria-hidden
+              className="rounded-full bg-sc-node font-mono text-xs tabular-nums"
+              style={{ paddingInline: SIZE.countPadX }}
+            >
+              {count.toLocaleString()}
+            </span>
+          )}
         </button>
       </EdgeLabelRenderer>
     </g>
@@ -528,7 +557,14 @@ export interface CanvasProps {
   readonly compact?: boolean
   /** Top to bottom suits a narrow, portrait container. */
   readonly initialDirection?: Direction
+  /** How often each edge was taken, by edge id: shown on its pill, and an edge never taken is drawn dashed. */
+  readonly counts?: ReadonlyMap<string, number>
+  /** Edges a replay took, highlighted as a path. */
+  readonly taken?: ReadonlySet<string>
 }
+
+const NO_COUNTS: ReadonlyMap<string, number> = new Map()
+const NOT_TAKEN: ReadonlySet<string> = new Set()
 
 export function Canvas({
   graph,
@@ -538,7 +574,9 @@ export function Canvas({
   trail,
   onReset,
   compact = false,
-  initialDirection = "RIGHT"
+  initialDirection = "RIGHT",
+  counts = NO_COUNTS,
+  taken = NOT_TAKEN
 }: CanvasProps) {
   const [direction, setDirection] = useState<Direction>(initialDirection)
   const [tool, setTool] = useState<Tool>("simulate")
@@ -547,17 +585,17 @@ export function Canvas({
 
   useEffect(() => {
     let cancelled = false
-    void layout(graph, direction, !compact).then((result) => {
+    void layout(graph, direction, !compact, counts).then((result) => {
       if (!cancelled) setLaidout(result)
     })
     return () => {
       cancelled = true
     }
-  }, [graph, direction, compact])
+  }, [graph, direction, compact, counts])
 
   if (laidout === undefined) return <div className="h-full bg-sc-canvas" />
   return (
-    <CanvasContext value={{ ...simulation, tool, selected, compact }}>
+    <CanvasContext value={{ ...simulation, tool, selected, compact, counts, taken }}>
       <ArrowMarkers />
       <ReactFlow
         key={`${graph.id}:${direction}`}
