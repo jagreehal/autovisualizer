@@ -120,16 +120,20 @@ const pillIconWidth = (edge: StateGraphEdge) =>
       ? SIZE.kindIcon + 6
       : 0
 
-// +6: both 2px borders plus a little slack for sub-pixel rounding.
-const pillWidth = (edge: StateGraphEdge) =>
-  textWidth(edge.label, FONT.pill) + SIZE.pillPadX * 2 + pillIconWidth(edge) + 6
+/** The count a page passed for an edge, drawn as a chip after its label. */
+export const countWidth = (count: number | undefined) =>
+  count === undefined ? 0 : textWidth(count.toLocaleString(), FONT.count) + SIZE.countPadX * 2 + 6
 
-function toElkEdge(edge: StateGraphEdge): ElkExtendedEdge {
+// +6: both 2px borders plus a little slack for sub-pixel rounding.
+const pillWidth = (edge: StateGraphEdge, count: number | undefined) =>
+  textWidth(edge.label, FONT.pill) + SIZE.pillPadX * 2 + pillIconWidth(edge) + countWidth(count) + 6
+
+function toElkEdge(edge: StateGraphEdge, count: number | undefined): ElkExtendedEdge {
   return {
     id: edge.id,
     sources: [flowId(edge.source)],
     targets: [flowId(edge.target)],
-    labels: [{ text: edge.label, width: pillWidth(edge), height: SIZE.pillHeight }]
+    labels: [{ text: edge.label, width: pillWidth(edge, count), height: SIZE.pillHeight }]
   }
 }
 
@@ -137,8 +141,13 @@ function indexStates(state: StateGraphNode): Array<readonly [string, StateGraphN
   return [[flowId(state.id), state], ...state.children.flatMap(indexStates)]
 }
 
-/** `rootHeader` false leaves out the machine's title bar, for compact embeds. */
-export async function layout(graph: MachineGraph, direction: Direction, rootHeader = true): Promise<Laidout> {
+/** `rootHeader` false leaves out the machine's title bar, for compact embeds. `counts` widens the pills that show one. */
+export async function layout(
+  graph: MachineGraph,
+  direction: Direction,
+  rootHeader = true,
+  counts: ReadonlyMap<string, number> = new Map()
+): Promise<Laidout> {
   // Measure with the real fonts: load them explicitly, since nothing on the page may use them yet.
   await Promise.all(Object.values(FONT).map((font) => document.fonts.load(font)))
   const result = await elk.layout({
@@ -163,7 +172,7 @@ export async function layout(graph: MachineGraph, direction: Direction, rootHead
       "elk.layered.cycleBreaking.strategy": "MODEL_ORDER"
     },
     children: [toElkNode(graph.root, { machineId: graph.id, direction, isRoot: true, isInitial: false, rootHeader })],
-    edges: graph.edges.map(toElkEdge)
+    edges: graph.edges.map((edge) => toElkEdge(edge, counts.get(edge.id)))
   })
 
   const states = new Map(indexStates(graph.root))

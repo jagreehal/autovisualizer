@@ -64,11 +64,20 @@ export const door = createMachine({ id: "door", initial: "closed", states: { clo
 | `code` | The machine's source as a string. Takes precedence over the inner script and `src`. |
 | `machine` | Id of the machine to show when the code creates several. Defaults to the first. |
 | `theme` | `auto` (default: follows the reader's system setting), `light` or `dark`. |
-| `events` | Event types to send before the chart shows, space-separated: `events="ADD_ITEM CHECKOUT"` opens at `address`. |
-| `walkthrough` | Steps to walk through, as JSON: `[{"event":"SUBMIT","note":"take payment"}]`. Adds previous, play and next under the chart, with each step's note. |
+| `state` | The state to open in, by path (`payment.processing`) or full id (`checkout.payment.processing`). For a parallel state, name one state per region, space-separated: `state="upload.done review.pending"`. The chart starts the machine as if its initial states led there: it skips the usual initial route, then enters the named state with its entry actions, eventless (`always`) transitions and done events, so a state that passes straight through opens where it lands. An unknown state shows an error that lists the machine's states. |
+| `input` | The machine's input, as JSON: `input='{"items":2}'`. |
+| `context` | Context to start with, as JSON, laid over the machine's own: `context='{"retries":2}'` changes `retries` and keeps the rest. Guards see it, and entry actions can still change it. Works with or without `state`. |
+| `events` | Events to send before the chart shows, space-separated: `events="ADD_ITEM CHECKOUT"` opens at `address`. For events that carry data, write a JSON array of names and whole events: `events='["ADD_ITEM",{"type":"xstate.done.actor.pay","output":{"id":"tx_1"}}]'`. |
+| `walkthrough` | Steps to walk through, as JSON: `[{"event":"SUBMIT","note":"take payment"}]`. Adds previous, play and next under the chart, with each step's note. An event that carries data is written whole: `{"event":{"type":"xstate.done.actor.pay","output":{"id":"tx_1"}}}`. |
 | `autoplay` | Steps through the walkthrough on its own. Readers who ask for less motion step themselves. |
+| `counts` | How often each transition was taken, as JSON keyed by state then event: `{"payment":{"PAID":120,"DECLINED":0}}`. Each count shows on its event, and a transition taken 0 times is drawn dashed: a path the code allows that nothing took. Name a state by its key or its full id (`checkout.payment`). |
+| `direction` | `auto` (default: top to bottom in containers narrower than 520px), `right` or `down`. A long chain reads better `down`. |
 
 An event the machine doesn't accept, or a `machine` id it doesn't create, shows an error in the chart.
+
+The events `events` and a walkthrough send are drawn as a path: each transition they took is highlighted, so a walkthrough that replays a real run shows its whole route, not only where it ended.
+
+From React, set `walkthrough`, `counts`, `input` and `context` as JSON strings with `setAttribute` (or as attributes in markup). React renders before `embed.js` defines the element, so an object passed as a prop arrives as the text `[object Object]`.
 
 The chart shows states and events only, so it leaves the machine's name to your page. The mouse wheel and a one-finger swipe scroll the page; drag with the mouse, or use two fingers, to pan and zoom the chart. In a narrow container the chart lays out top to bottom. Charts load as they near the viewport, so a page with ten charts loads the ones your readers reach. The element is 480px tall by default; give it any `height` in your CSS. It renders in a shadow root, so your page's styles don't reach in and its styles don't leak out. Each chart runs its machine in its own Web Worker. `embed.d.ts` and `embed.react.d.ts` next to `embed.js` type the element for TypeScript and JSX.
 

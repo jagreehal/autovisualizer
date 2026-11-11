@@ -25,7 +25,12 @@ export class MachineWorker extends Context.Service<
   MachineWorker,
   {
     readonly load: (code: string) => Effect.Effect<Answer<"Loaded">, WorkerError>
-    readonly start: (machine: number, inputJson: string) => Effect.Effect<Answer<"Simulated">, WorkerError>
+    readonly start: (
+      machine: number,
+      inputJson: string,
+      state?: string,
+      contextJson?: string
+    ) => Effect.Effect<Answer<"Simulated">, WorkerError>
     readonly send: (eventJson: string) => Effect.Effect<Answer<"Simulated">, WorkerError>
   }
 >()("MachineWorker") {
@@ -86,7 +91,8 @@ export class MachineWorker extends Context.Service<
 
       return MachineWorker.of({
         load: (code) => request({ _tag: "Load", code }, "Loaded"),
-        start: (machine, inputJson) => request({ _tag: "Start", machine, inputJson }, "Simulated"),
+        start: (machine, inputJson, state = "", contextJson = "{}") =>
+          request({ _tag: "Start", machine, inputJson, state, contextJson }, "Simulated"),
         send: (eventJson) => request({ _tag: "Send", eventJson }, "Simulated")
       })
     })

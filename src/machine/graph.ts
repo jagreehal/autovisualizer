@@ -164,8 +164,22 @@ function resolveTarget(machine: AnyStateMachine, source: AnyStateNode, target: s
   }
 }
 
-function allNodes(stateNode: AnyStateNode): Array<AnyStateNode> {
+export function allNodes(stateNode: AnyStateNode): Array<AnyStateNode> {
   return [stateNode, ...Object.values(stateNode.states).flatMap(allNodes)]
+}
+
+/** The transitions of a state in edge-id order: event transitions, then eventless ones. */
+export function transitionsOf(source: AnyStateNode): Array<AnyTransitionDefinition> {
+  return [...[...source.transitions.values()].flat(), ...(source.always ?? [])]
+}
+
+/**
+ * A transition's id: every edge drawn for it has an id of `<this>:<target number>`. Taken
+ * transitions come back resolved (a function's target filled in); `definition` is the original.
+ */
+export function transitionId(transition: AnyTransitionDefinition): string {
+  const definition = transition.definition ?? transition
+  return `${definition.source.id}:${transitionsOf(definition.source).indexOf(definition)}`
 }
 
 /** `name` is the exported binding, used when the machine has no `id`. */
@@ -179,8 +193,7 @@ export function toMachineGraph(machine: AnyStateMachine, name: string | undefine
     node.path.reduce<Json | undefined>((json, key) => field(field(json, "states"), key), definition)
 
   for (const source of allNodes(machine.root)) {
-    const transitions = [...[...source.transitions.values()].flat(), ...(source.always ?? [])]
-    transitions.forEach((transition, index) => {
+    transitionsOf(source).forEach((transition, index) => {
       const { kind, label } = describe(source, transition)
       const eventJson = kind === "always" ? undefined : JSON.stringify(eventFor(transition))
       const push = (target: AnyStateNode, inferred: boolean, n: number, branch: number | undefined) =>

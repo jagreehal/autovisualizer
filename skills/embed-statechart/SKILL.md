@@ -37,8 +37,10 @@ The code may import `xstate`, `@xstate/effect` and `effect`. When it creates sev
 
 ## Tell a story
 
-- `events="ADD_ITEM CHECKOUT"` sends events before the chart shows, so it opens partway through.
-- `walkthrough='[{"event":"SUBMIT","note":"take payment"}]'` adds previous, play and next controls with a note per step.
+- `events="ADD_ITEM CHECKOUT"` sends events before the chart shows, so it opens partway through. Events that carry data go in a JSON array: `events='["ADD_ITEM",{"type":"xstate.done.actor.pay","output":{"id":"tx_1"}}]'`.
+- `state="payment.processing"` opens the chart in that state, by path or full id. For a parallel state, name one state per region, space-separated. Reach for it when events alone would take a long story to get there. The chart enters the state as if the machine's initial states led there, with its entry actions, eventless transitions and done events, so a state that passes straight through opens where it lands.
+- `input='{"items":2}'` sets the machine's input. `context='{"retries":2}'` lays fields over the machine's context before it starts, so guards see them. It works with or without `state`.
+- `walkthrough='[{"event":"SUBMIT","note":"take payment"}]'` adds previous, play and next controls with a note per step. An event with data is written whole: `{"event":{"type":"xstate.done.actor.pay","output":{"id":"tx_1"}},"note":"paid"}`.
 - `autoplay` steps through the walkthrough by itself. Readers who prefer reduced motion step by hand.
 - Give the element an `id` and each step lands in the URL (`#checkout/2`). Share that link to open the walkthrough at that step.
 

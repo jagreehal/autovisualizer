@@ -6,6 +6,7 @@ import { Effect, Schema } from "effect"
 
 import { evaluate } from "./evaluate"
 import { toMachineGraph } from "./graph"
+import { JsonEvent } from "./json"
 import { Request, Response } from "./protocol"
 import { JsonObject, start, step, view } from "./simulate"
 
@@ -16,15 +17,16 @@ class SimulationError extends Schema.TaggedError<SimulationError>()("SimulationE
 }) {}
 
 const decodeInput = Schema.decodeUnknownEffect(Schema.fromJsonString(JsonObject))
-const decodeEvent = Schema.decodeUnknownEffect(
-  Schema.fromJsonString(Schema.StructWithRest(Schema.Struct({ type: Schema.String }), [JsonObject]))
-)
+const decodeEvent = Schema.decodeUnknownEffect(Schema.fromJsonString(JsonEvent))
 
 let machines: ReadonlyArray<AnyStateMachine> = []
 let current: { machine: AnyStateMachine; snapshot: AnyMachineSnapshot } | undefined
 
 const attempt = <A>(run: () => A) =>
-  Effect.try({ try: run, catch: (cause) => new SimulationError({ message: String(cause) }) })
+  Effect.try({
+    try: run,
+    catch: (cause) => new SimulationError({ message: cause instanceof Error ? cause.message : String(cause) })
+  })
 
 const handle = (request: Request): Effect.Effect<Response, { readonly message: string; readonly _tag: string }> => {
   switch (request._tag) {
@@ -46,7 +48,8 @@ const handle = (request: Request): Effect.Effect<Response, { readonly message: s
         const machine = machines[request.machine]
         if (machine === undefined) return yield* new SimulationError({ message: "Machine not loaded" })
         const input = yield* decodeInput(request.inputJson)
-        const snapshot = yield* attempt(() => start(machine, input))
+        const context = yield* decodeInput(request.contextJson)
+        const snapshot = yield* attempt(() => start(machine, input, request.state, context))
         current = { machine, snapshot }
         return { _tag: "Simulated", id: request.id, view: view(snapshot, true) }
       })
@@ -55,9 +58,9 @@ const handle = (request: Request): Effect.Effect<Response, { readonly message: s
         if (current === undefined) return yield* new SimulationError({ message: "Start the machine first" })
         const { machine, snapshot } = current
         const event = yield* decodeEvent(request.eventJson)
-        const [next, handled] = yield* attempt(() => step(machine, snapshot, event))
+        const [next, handled, taken] = yield* attempt(() => step(machine, snapshot, event))
         current = { machine, snapshot: next }
-        return { _tag: "Simulated", id: request.id, view: view(next, handled) }
+        return { _tag: "Simulated", id: request.id, view: view(next, handled, taken) }
       })
   }
 }
