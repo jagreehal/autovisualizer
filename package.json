@@ -1,6 +1,6 @@
 {
   "name": "autovisualizer",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "description": "See and step through XState v6 and @xstate/effect machines in the browser.",
   "license": "Apache-2.0",
   "author": "Jag Reehal",
