@@ -44,6 +44,7 @@ The code may import `xstate`, `@xstate/effect` and `effect`. When it creates sev
 - `snapshot='{…}'` resumes an actor where it left off. Pass the JSON from `actor.getPersistedSnapshot()`. State, context, history and pending timers come back as they were, and entry actions don't run again. It wins over `state` and `context`.
 - `walkthrough='[{"event":"SUBMIT","note":"take payment"}]'` adds previous, play and next controls with a note per step. An event with data is written whole: `{"event":{"type":"xstate.done.actor.pay","output":{"id":"tx_1"}},"note":"paid"}`.
 - `autoplay` steps through the walkthrough by itself. Readers who prefer reduced motion step by hand.
+- Narrate it: `speak` reads each note with the browser's voice (`voice`, `rate`). `audio-src="audio/{step}.wav"` plays a recorded clip per step; record them from `element.getSteps()` with any speech model, such as Phonon through ai-sdk-ollama. `element.narrate = async (step) => urlOrBlob` voices steps live. Autoplay waits for each step's audio, and the `step` event fires on every step.
 - Give the element an `id` and each step lands in the URL (`#checkout/2`). Share that link to open the walkthrough at that step, or link to it from the same page.
 
 ## Fit it to the page

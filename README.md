@@ -81,11 +81,55 @@ export const door = createMachine({ id: "door", initial: "closed", states: { clo
 | `snapshot` | Resume exactly where an actor left off: the JSON from `actor.getPersistedSnapshot()`. Its state, context, history and pending timers come back as they were, and no entry actions run again, which `state` and `context` can't promise. Wins over both. A snapshot that doesn't fit the machine (another machine's id or version, or a state it doesn't have) shows why. |
 | `events` | Events to send before the chart shows, space-separated: `events="ADD_ITEM CHECKOUT"` opens at `address`. For events that carry data, write a JSON array of names and whole events: `events='["ADD_ITEM",{"type":"xstate.done.actor.pay","output":{"id":"tx_1"}}]'`. |
 | `walkthrough` | Steps to walk through, as JSON: `[{"event":"SUBMIT","note":"take payment"}]`. Adds previous, play and next under the chart, with each step's note. An event that carries data is written whole: `{"event":{"type":"xstate.done.actor.pay","output":{"id":"tx_1"}}}`. |
-| `autoplay` | Steps through the walkthrough on its own. Readers who ask for less motion step themselves. |
+| `autoplay` | Steps through the walkthrough on its own. Readers who ask for less motion step themselves. With narration, each step waits for its audio to end. |
+| `speak` | Reads each step's note aloud with the browser's voice. |
+| `voice` | Part of the browser voice's name for `speak`, matched case-insensitively: `voice="samantha"`. |
+| `rate` | Speaking rate for `speak`, `0.1` to `10`. |
+| `audio-src` | A recorded clip per step: `audio-src="audio/{step}.wav"`. A clip that can't play falls back to `speak`. |
 | `counts` | How often each transition was taken, as JSON keyed by state then event: `{"payment":{"PAID":120,"DECLINED":0}}`. Each count shows on its event, and a transition taken 0 times is drawn dashed: a path the code allows that nothing took. Name a state by its key or its full id (`checkout.payment`). |
 | `direction` | `auto` (default), `right` or `down`. `auto` lays the chart out both ways and keeps the one that shows it larger in its space: a long chain goes top to bottom in a wide column, a wide machine left to right in a short box, and a small machine that fits either way goes right. |
 
 An event the machine doesn't accept, or a `machine` id it doesn't create, shows an error in the chart.
+
+**Narrate the walkthrough.** Each step's note is its script. Add `speak` and the browser reads each note aloud, and `autoplay` moves on when the sentence ends:
+
+```html
+<auto-visualizer src="/machines/checkout.ts" speak voice="samantha" rate="0.9"
+  walkthrough='[{"event":"CHECKOUT","note":"The cart is ready, so we ask for an address."},{"event":"SUBMIT","note":"Then we take payment."}]'
+></auto-visualizer>
+```
+
+For a voice model, record a clip per step and point `audio-src` at them: `audio-src="audio/{step}.wav"`, where `{step}` is the step's number. `element.getSteps()` returns each step's `index`, `event`, `note` and `text` (the note, or the event when there's no note). Send the text to any speech model and save the clips. This records them with [Phonon](https://ollama.com/library/phonon) in Ollama, through [ai-sdk-ollama](https://github.com/jagreehal/ai-sdk-ollama):
+
+```js
+import { writeFile } from "node:fs/promises"
+import { generateSpeech } from "ai"
+import { ollama } from "ai-sdk-ollama"
+
+// The chart's steps: JSON.stringify(document.querySelector("auto-visualizer").getSteps()) in the browser console.
+for (const step of steps) {
+  const { audio } = await generateSpeech({
+    model: ollama.speech("phonon:40m-multilingual"),
+    text: step.text,
+    voice: "Hugh",
+    outputFormat: "wav"
+  })
+  await writeFile(`audio/${step.index}.wav`, audio.uint8Array)
+}
+```
+
+To voice steps live, set `narrate` to a function that returns each step's audio as a URL or a `Blob`, for example from your own speech endpoint:
+
+```js
+const chart = document.querySelector("auto-visualizer")
+chart.narrate = async (step) => {
+  const response = await fetch("/api/speak", { method: "POST", body: step.text })
+  return response.ok ? response.blob() : undefined
+}
+chart.addEventListener("step", (event) => console.log(event.detail.index, event.detail.text))
+```
+
+The chart tries `narrate` first, then the `audio-src` clip, then `speak`, and waits for each step's audio before autoplay moves on. The `step` event fires on every walkthrough step, played or stepped by hand. Browsers play sound only after the reader interacts with the page, so narration starts when they press play or next.
 
 The events `events` and a walkthrough send are drawn as a path: each transition they took is highlighted, so a walkthrough that replays a real run shows its whole route, not only where it ended.
 

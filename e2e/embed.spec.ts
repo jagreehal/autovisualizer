@@ -460,3 +460,72 @@ export const door = createMachine({ id: "door", initial: "closed", states: { clo
     await expect(chart.getByRole("group", { name: "open", exact: true })).toHaveAttribute("aria-current", "true")
   })
 })
+
+interface Narrating extends HTMLElement {
+  narrate?: (step: { index: number; text: string }) => Promise<undefined>
+  getSteps(): Array<{ index: number; event: string; note: string; text: string }>
+  told?: Array<string>
+  finish?: () => void
+}
+
+test.describe("<auto-visualizer> narration", () => {
+  test("announces each step, lists the steps, and autoplay waits for the narrator", async ({ page, baseURL }) => {
+    await docsPage(
+      page,
+      baseURL,
+      `<auto-visualizer id="told" style="height: 300px" walkthrough='[{"event":"TOGGLE","note":"switch it on"},{"event":"TOGGLE"}]'>
+         <script type="application/json">${TOGGLE_JSON}</script></auto-visualizer>`
+    )
+    const chart = page.locator("#told")
+    await expect(chart.getByRole("group", { name: "off", exact: true })).toHaveAttribute("aria-current", "true")
+    expect(await chart.evaluate((element: Narrating) => element.getSteps())).toEqual([
+      { index: 1, event: "TOGGLE", note: "switch it on", text: "switch it on" },
+      { index: 2, event: "TOGGLE", note: "", text: "TOGGLE" }
+    ])
+
+    // The narrator answers when the test says so: autoplay holds each step until then.
+    await chart.evaluate((element: Narrating) => {
+      const told: Array<string> = []
+      const pending: Array<() => void> = []
+      element.told = told
+      element.finish = () => pending.shift()?.()
+      element.addEventListener("step", (event) => {
+        if (event instanceof CustomEvent) told.push(`step ${event.detail.index}`)
+      })
+      element.narrate = (step) =>
+        new Promise((resolve) => {
+          told.push(`narrate ${step.text}`)
+          pending.push(() => resolve(undefined))
+        })
+    })
+    const told = () => chart.evaluate((element: Narrating) => element.told)
+    const bar = chart.getByRole("group", { name: "Walkthrough" })
+    await bar.getByRole("button", { name: "Play" }).click()
+    await expect.poll(told).toEqual(["step 1", "narrate switch it on"])
+    // Well past the 1.8s a silent step waits: still on step 1.
+    await page.waitForTimeout(2500)
+    await expect(bar).toContainText("1/2")
+    await chart.evaluate((element: Narrating) => element.finish?.())
+    await expect.poll(told).toEqual(["step 1", "narrate switch it on", "step 2", "narrate TOGGLE"])
+    await expect(bar).toContainText("2/2")
+  })
+
+  test("a narrator that throws doesn't stop autoplay", async ({ page, baseURL }) => {
+    await docsPage(
+      page,
+      baseURL,
+      `<auto-visualizer id="unvoiced" style="height: 300px" walkthrough='[{"event":"TOGGLE"},{"event":"TOGGLE"}]'>
+         <script type="application/json">${TOGGLE_JSON}</script></auto-visualizer>`
+    )
+    const chart = page.locator("#unvoiced")
+    await expect(chart.getByRole("group", { name: "off", exact: true })).toHaveAttribute("aria-current", "true")
+    await chart.evaluate((element: Narrating) => {
+      element.narrate = () => {
+        throw new Error("no voice")
+      }
+    })
+    const bar = chart.getByRole("group", { name: "Walkthrough" })
+    await bar.getByRole("button", { name: "Play" }).click()
+    await expect(bar).toContainText("2/2", { timeout: 8000 })
+  })
+})
