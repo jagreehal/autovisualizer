@@ -5,7 +5,7 @@ description: Add the Autovisualizer statechart review to a repository's pull req
 
 # Review statechart changes in pull requests
 
-The action runs each changed machine file at the PR's base and head, compares the machines, and posts one comment that it updates on each push. The comment holds:
+The action runs each changed machine file at the PR's head and at the commit the PR branched from, compares the machines, and posts one comment that it updates on each push. The comment holds:
 
 - a merge risk: high when a machine loses a state or transition or a state becomes unreachable, moderate when a state changes kind or initial state, a target can't be read, or a file can't run
 - a table of changed machines with states and transitions before and after

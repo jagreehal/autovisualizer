@@ -95,9 +95,45 @@ The chart shows states and events only, so it leaves the machine's name to your 
 
 ### In READMEs, issues and pull requests
 
-Export the chart as an image. In [the app](https://auto-visualizer.vercel.app), **Save → SVG image** exports the chart as one self-contained SVG, and **Save → Animated SVG** exports every step you simulated since the last reset, like the demo above. Both follow the reader's light or dark setting, and readers who ask for less motion see the last step as a still image.
+GitHub can't run the element, so give it an image. Put each chart in your Markdown as an SVG link with its source in a collapsed `<details>` block below it:
 
-To build one in CI, ask a chart on your docs page for its walkthrough as an animated SVG: `await element.toAnimatedSvg({ title, stepMs, direction })` (`direction` is `right`, the default, or `down`). It returns the SVG text, a frame per step, captioned with the step's event and note, so keep notes short. Call it from a headless browser once the chart has loaded:
+````md
+![Door statechart](docs/door.svg)
+<details><summary>Statechart source</summary>
+
+```statechart walkthrough='[{"event":"OPEN","note":"someone knocks"}]'
+import { createMachine } from "xstate"
+export const door = createMachine({ id: "door", initial: "closed", states: { closed: { on: { OPEN: { target: "open" } } }, open: {} } })
+```
+</details>
+````
+
+Then let the action draw the images. With `render`, it finds each chart, draws it with the same export as the app, and commits the SVGs that changed. A chart with a `walkthrough` becomes an animated SVG. Attributes on the fence line are the element's own (`walkthrough`, `events`, `state`, `direction`), and source that starts with `{` is MachineJSON:
+
+```yaml
+on:
+  pull_request:
+    paths: ['**/*.md']
+permissions:
+  contents: write
+jobs:
+  statecharts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with: { ref: '${{ github.head_ref }}' }
+      - uses: actions/setup-node@v7
+        with: { node-version: 24 }
+      - uses: jagreehal/autovisualizer@main
+        with:
+          render: README.md docs/guide.md
+```
+
+It draws in the runner's Chrome. To render locally, build the CLI and the embed from an Autovisualizer checkout (`pnpm build:review && pnpm build:embed`), then run `node /path/to/autovisualizer/dist/review/cli.mjs render README.md`.
+
+You can also export by hand. In [the app](https://auto-visualizer.vercel.app), **Save → SVG image** exports the chart as one self-contained SVG, and **Save → Animated SVG** exports every step you simulated since the last reset, like the demo above. Both follow the reader's light or dark setting, and readers who ask for less motion see the last step as a still image.
+
+From your own docs build, ask a chart on your page for its walkthrough as an animated SVG: `await element.toAnimatedSvg({ title, stepMs, direction })` (`direction` is `right`, the default, or `down`). It returns the SVG text, a frame per step, captioned with the step's event and note, so keep notes short. Call it from a headless browser once the chart has loaded:
 
 ```js
 const chart = page.locator("auto-visualizer#checkout")
@@ -127,7 +163,7 @@ steps:
       fail-on-regression: true      # optional: fail when a machine lost a state or transition
 ```
 
-It finds machines in TypeScript or JavaScript that call `createMachine`, `setup().createMachine`, `setupEffect().createMachine` or `machineFromJSON`, and in MachineJSON files (`machineToJSON` output, or any `.json` with `states`). Removed states or transitions, and states that became unreachable, make the merge risk high. A target it can't read, or a file it couldn't run, makes it moderate. The first run takes about a minute.
+It compares the pull request with the commit it branched from, so changes that landed on the base branch since then stay out of the review. It finds machines in TypeScript or JavaScript that call `createMachine`, `setup().createMachine`, `setupEffect().createMachine` or `machineFromJSON`, and in MachineJSON files (`machineToJSON` output, or any `.json` with `states`). Removed states or transitions, and states that became unreachable, make the merge risk high. A target it can't read, or a file it couldn't run, makes it moderate. The first run takes about a minute.
 
 The review runs the machine files, the same as your tests do. Imports other than `xstate`, `@xstate/effect` and `effect` get stand-ins, so a machine can import its own actions and helpers. Use the `pull_request` trigger. The action refuses `pull_request_target`, which would run a fork's code with a write token.
 

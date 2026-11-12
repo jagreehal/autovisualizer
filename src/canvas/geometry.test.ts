@@ -80,4 +80,28 @@ describe("placePills", () => {
     const label = { x: 10, y: 150, ...pill }
     expect(placePills([{ points: short, label }], [wall])).toEqual([label])
   })
+
+  it("moves ELK's spot off a pill placed before it when the line has no free room", () => {
+    // Two short opposite edges between stacked states (idle ⇄ cart): no room on either line.
+    const idle = { x: 0, y: 0, width: 200, height: 46 }
+    const cart = { x: 0, y: 120, width: 200, height: 46 }
+    const down = [
+      { x: 120, y: 46 },
+      { x: 120, y: 120 }
+    ]
+    const up = [
+      { x: 90, y: 120 },
+      { x: 90, y: 46 }
+    ]
+    const [first, second] = placePills(
+      [
+        { points: down, label: { x: 120, y: 66, ...pill } },
+        { points: up, label: { x: 30, y: 66, ...pill } }
+      ],
+      [idle, cart]
+    )
+    const apart =
+      (first?.x ?? 0) + pill.width + 4 <= (second?.x ?? 0) || (second?.x ?? 0) + pill.width + 4 <= (first?.x ?? 0)
+    expect(apart).toBe(true)
+  })
 })

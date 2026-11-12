@@ -142,9 +142,6 @@ const tag =
 
 /** While a simulation runs, what the active states can't reach steps back. */
 const dimmed = "opacity-60"
-// The active ring eases in from the state's edge, so the eye follows a transition to its target.
-const fade =
-  "motion-safe:transition-[opacity,outline-color,outline-width,outline-offset,background-color,scale] motion-safe:duration-150 motion-safe:ease-out"
 
 function StateNodeView({ data }: NodeProps<StateFlowNode>) {
   const { state, machineId, isRoot, isInitial, isRegion, isUnreachable, hasUnresolved } = data
@@ -185,7 +182,6 @@ function StateNodeView({ data }: NodeProps<StateFlowNode>) {
         aria-current={isActive || undefined}
         className={cn(
           "relative h-full w-full rounded-[8px]",
-          fade,
           isRoot ? "bg-transparent" : "border-[3px] border-sc-parent-border bg-sc-parent/70",
           isRegion && "border-2 border-dashed",
           isDimmed && !isRoot && dimmed,
@@ -226,15 +222,14 @@ function StateNodeView({ data }: NodeProps<StateFlowNode>) {
       ? "border-sc-error-final-border bg-sc-error-final-fill text-sc-error-final-fg"
       : finalKind === "final"
         ? "border-sc-final-border bg-sc-final-fill text-sc-final-fg"
-        : "border-sc-node-border bg-sc-node text-sc-node-fg"
+        : "border-sc-node-border/25 bg-sc-node text-sc-node-fg"
   return (
     <div
       role="group"
       aria-label={state.key}
       aria-current={isActive || undefined}
       className={cn(
-        "relative flex h-full w-full flex-col justify-center gap-1 rounded-[6px] border-2",
-        fade,
+        "relative flex h-full w-full flex-col justify-center gap-1 rounded-[6px] border shadow-md",
         tone,
         // The active mark: a 4px blue ring standing 2px off the state.
         isActive && "outline-4 outline-offset-2 outline-sc-active",
@@ -310,7 +305,7 @@ function TransitionEdgeView({ id, data }: EdgeProps<TransitionFlowEdge>) {
   const canSend = tool === "simulate" && live && edge.eventJson !== undefined && enabled.has(edge.eventJson)
   const path = roundedPath(points)
   return (
-    <g className={cn(fade, isDimmed && dimmed)}>
+    <g className={isDimmed ? dimmed : undefined}>
       {/* The casing: a canvas-coloured band under the line, so lines read where they cross. */}
       <path d={path} fill="none" stroke="var(--sc-casing)" strokeWidth={6} strokeLinejoin="round" />
       <BaseEdge
@@ -319,13 +314,11 @@ function TransitionEdgeView({ id, data }: EdgeProps<TransitionFlowEdge>) {
         markerEnd="url(#sc-arrow)"
         style={{
           stroke: isTaken ? "var(--sc-active)" : "var(--sc-edge)",
-          strokeWidth: isTaken ? 3 : 2,
+          strokeWidth: isTaken ? 2.5 : 1.5,
           strokeDasharray: isUnused ? "2 5" : edge.inferred ? "6 5" : undefined
         }}
       />
       <EdgeLabelRenderer>
-        {/* Press feedback uses the `scale` property, which scales the pill in place before the
-            translate below, so the pill stays under the pointer. */}
         <button
           type="button"
           disabled={!canSend}
@@ -339,20 +332,19 @@ function TransitionEdgeView({ id, data }: EdgeProps<TransitionFlowEdge>) {
           onClick={() => edge.eventJson !== undefined && send(edge.eventJson)}
           title={edge.inferred ? "Target read from a transition function" : edge.eventJson}
           className={cn(
-            "nodrag nopan pointer-events-auto absolute flex items-center justify-center gap-1.5 rounded-full border-2 font-semibold whitespace-nowrap",
-            "bg-sc-pill text-sm",
-            fade,
+            "nodrag nopan pointer-events-auto absolute flex items-center justify-center gap-1.5 rounded-full border font-semibold whitespace-nowrap",
+            "bg-sc-pill text-sm shadow-sm",
             // Dim by colour, not opacity: the pill sits on its line and must hide it.
             isDimmed || isUnused
-              ? "border-sc-node-border/55 text-sc-pill-fg/60"
-              : "border-sc-node-border text-sc-pill-fg",
+              ? "border-sc-node-border/20 text-sc-pill-fg/60"
+              : "border-sc-node-border/40 text-sc-pill-fg",
             isTaken && "border-sc-active",
             isUnused && "border-dashed",
             edge.kind === "always" && "italic",
             edge.inferred && "border-dashed",
-            // Sendable now: a thin blue line just outside the pill.
+            // Sendable now: a solid blue pill.
             canSend &&
-              "cursor-pointer outline-2 outline-offset-0 outline-sc-active hover:bg-sc-active-fill focus-visible:outline-4 active:scale-[0.97]"
+              "cursor-pointer border-sc-active bg-sc-active text-sc-casing hover:brightness-110 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sc-active"
           )}
           style={{
             transform: `translate(${label.x}px, ${label.y}px)`,
@@ -366,7 +358,7 @@ function TransitionEdgeView({ id, data }: EdgeProps<TransitionFlowEdge>) {
           {count !== undefined && (
             <span
               aria-hidden
-              className="rounded-full bg-sc-node font-mono text-xs tabular-nums"
+              className="rounded-full bg-sc-node font-mono text-xs text-sc-node-fg tabular-nums"
               style={{ paddingInline: SIZE.countPadX }}
             >
               {count.toLocaleString()}
@@ -382,7 +374,7 @@ const nodeTypes = { state: StateNodeView }
 const edgeTypes = { transition: TransitionEdgeView }
 
 function ArrowMarkers() {
-  // Marker units scale with the 2px stroke: 5 units draw a 10px head.
+  // Marker units scale with the 1.5px stroke: 5 units draw a 7.5px head.
   return (
     <svg className="absolute size-0">
       <defs>

@@ -94,7 +94,11 @@ export const machineCode = (path: string, text: string | undefined) =>
         : Effect.succeed(undefined)
       : Effect.succeed(MAKES_MACHINE.test(text) ? text : undefined)
 
-function changedFiles(options: ReviewOptions, cwd: string) {
+/**
+ * Where the change left `base`: their merge base. Commits that landed on `base` since then aren't part of the
+ * change, so diffing against the base tip would show them reversed.
+ */
+function forkPoint(options: ReviewOptions, cwd: string) {
   for (const ref of [options.base, options.head]) {
     if (ref === undefined) continue
     try {
@@ -103,8 +107,18 @@ function changedFiles(options: ReviewOptions, cwd: string) {
       throw new Error(`Cannot resolve '${ref}'. Fetch it first: git fetch origin ${ref.replace(/^origin\//, "")}`)
     }
   }
+  try {
+    return git(["merge-base", options.base, options.head ?? "HEAD"], cwd).trim()
+  } catch {
+    throw new Error(
+      `'${options.base}' and '${options.head ?? "HEAD"}' share no commit in this clone. Fetch more history: git fetch --deepen=100 origin`
+    )
+  }
+}
+
+function changedFiles(options: ReviewOptions, base: string, cwd: string) {
   const pathspecs = options.paths?.length ? ["--", ...options.paths] : []
-  const range = options.head ? [options.base, options.head] : [options.base]
+  const range = options.head ? [base, options.head] : [base]
   const files: Array<Omit<ReviewFile, "machines">> = []
   for (const line of git(["diff", "--name-status", "--find-renames", ...range, ...pathspecs], cwd).split("\n")) {
     const [code, first, second] = line.split("\t")
@@ -265,8 +279,9 @@ function riskOf(files: ReadonlyArray<ReviewFile>): ReviewReport["risk"] {
 export async function buildReview(options: ReviewOptions): Promise<ReviewReport> {
   const cwd = options.cwd ?? process.cwd()
   const files: Array<ReviewFile> = []
-  for (const file of changedFiles(options, cwd)) {
-    const before = file.status === "added" ? undefined : sourceAt(options.base, file.previousPath ?? file.path, cwd)
+  const base = forkPoint(options, cwd)
+  for (const file of changedFiles(options, base, cwd)) {
+    const before = file.status === "added" ? undefined : sourceAt(base, file.previousPath ?? file.path, cwd)
     const after = file.status === "removed" ? undefined : sourceAt(options.head, file.path, cwd)
     const { machines, error, source } = await Effect.runPromise(
       Effect.all([machineCode(file.previousPath ?? file.path, before), machineCode(file.path, after)]).pipe(

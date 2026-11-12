@@ -6,10 +6,15 @@
  *     [--fail-on-regression]
  *
  * JSON carries the markdown too, so the action needs one run for the gate and the comment.
+ *
+ * `render`: draws the statecharts Markdown files link to as SVG images (see render.ts).
+ *
+ *   node dist/review/cli.mjs render README.md docs/guide.md [--embed public/embed]
  */
 import { writeFileSync } from "node:fs"
 import { parseArgs } from "node:util"
 
+import { defaultEmbedDir, renderMarkdown } from "./render"
 import { buildReview, renderReviewMarkdown } from "./review"
 
 const { values, positionals } = parseArgs({
@@ -21,9 +26,17 @@ const { values, positionals } = parseArgs({
     output: { type: "string", short: "o" },
     diagrams: { type: "string", default: "open" },
     "app-url": { type: "string" },
-    "fail-on-regression": { type: "boolean", default: false }
+    "fail-on-regression": { type: "boolean", default: false },
+    embed: { type: "string" }
   }
 })
+
+if (positionals[0] === "render") {
+  const { written, failed } = await renderMarkdown(positionals.slice(1), values.embed ?? defaultEmbedDir())
+  for (const path of written) console.log(`wrote ${path}`)
+  for (const failure of failed) console.error(`::error::${failure}`)
+  process.exit(failed.length > 0 ? 1 : 0)
+}
 // A leading `review` is the command name, not a path.
 const paths = positionals[0] === "review" ? positionals.slice(1) : positionals
 

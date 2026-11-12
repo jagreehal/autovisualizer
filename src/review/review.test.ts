@@ -1,7 +1,12 @@
+import { execFileSync } from "node:child_process"
+import { mkdtempSync, writeFileSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
+
 import { Effect } from "effect"
 import { describe, expect, it } from "vitest"
 
-import { machineCode, renderReviewMarkdown, reviewSources } from "./review"
+import { buildReview, machineCode, renderReviewMarkdown, reviewSources } from "./review"
 
 const machine = (states: string) => `
 import { createMachine } from "xstate"
@@ -102,5 +107,27 @@ describe("untrusted names", () => {
     expect(summary).toContain("&lt;img src=x onerror=alert(1)&gt;")
     expect(summary).toContain("src/&lt;b&gt;door&lt;/b&gt;.ts")
     expect(summary).not.toMatch(/<img|<b>/)
+  })
+})
+
+describe("buildReview", () => {
+  it("reviews the branch against where it left the base, not the base's later commits", async () => {
+    const cwd = mkdtempSync(join(tmpdir(), "review-"))
+    const run = (...args: ReadonlyArray<string>) => execFileSync("git", args, { cwd, stdio: "pipe" })
+    const commit = (path: string, text: string) => {
+      writeFileSync(join(cwd, path), text)
+      run("add", path)
+      run("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", path)
+    }
+    run("init", "-q", "-b", "main")
+    commit("door.ts", before)
+    run("checkout", "-qb", "docs")
+    commit("README.md", "# Door")
+    run("checkout", "-q", "main")
+    commit("door.ts", after)
+
+    const report = await buildReview({ base: "main", head: "docs", cwd })
+    expect(report.files).toEqual([])
+    expect(report.risk).toBe("low")
   })
 })
