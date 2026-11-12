@@ -2,7 +2,8 @@ name: 'Autovisualizer statechart review'
 description: >-
   Reviews the XState machines a pull request touched: states and transitions added and
   removed, newly unreachable states, and a statechart per changed machine with the changes
-  highlighted, posted as one sticky PR comment and the job summary.
+  highlighted, posted as one sticky PR comment and the job summary. With `render`, draws the
+  statecharts your Markdown links to as SVG images and commits the ones that changed.
 author: 'Jag Reehal'
 branding:
   icon: 'git-pull-request'
@@ -33,6 +34,9 @@ inputs:
   cli:
     description: 'Command that runs the review. Empty builds it from this action''s source.'
     default: ''
+  render:
+    description: 'Markdown files whose statecharts to draw, space separated. Set it to render and commit SVG images instead of reviewing.'
+    default: ''
   github-token:
     description: 'Token used to post the comment.'
     default: ${{ github.token }}
@@ -48,7 +52,7 @@ outputs:
 runs:
   using: composite
   steps:
-    # The review runs the reviewed code. pull_request_target would run a fork's code
+    # The review and the render run the repository's machine code. pull_request_target would run a fork's code
     # with a write token and the base repo's secrets, so refuse it outright.
     - name: Refuse pull_request_target
       if: github.event_name == 'pull_request_target'
@@ -57,7 +61,14 @@ runs:
         echo "::error::the statechart review runs the PR's machine code; use on: pull_request, not pull_request_target"
         exit 1
 
+    - name: Check Node
+      shell: bash
+      run: |
+        node -e 'process.exit(+process.versions.node.split(".")[0] >= 24 ? 0 : 1)' \
+          || { echo "::error::Autovisualizer needs Node 24+; add actions/setup-node with node-version: 24 before this step"; exit 1; }
+
     - name: Resolve refs
+      if: inputs.render == ''
       id: refs
       shell: bash
       env:
@@ -71,10 +82,14 @@ runs:
         head="${INPUT_HEAD:-${PR_HEAD:-HEAD}}"
         # First push of a branch has an all-zero "before".
         case "$base" in ''|0000000000000000000000000000000000000000) base=HEAD~1; git fetch --no-tags --deepen=1 origin 2>/dev/null || true ;; esac
-        node -e 'process.exit(+process.versions.node.split(".")[0] >= 24 ? 0 : 1)' \
-          || { echo "::error::the statechart review needs Node 24+; add actions/setup-node with node-version: 24 before this step"; exit 1; }
-        # A shallow checkout has neither side; fetch just those commits.
+        # A shallow checkout has neither side; fetch them, then history back to where they meet,
+        # so the review compares the change with its merge base, not the base branch's later commits.
         git fetch --no-tags --depth=1 origin "$base" "$head" 2>/dev/null || true
+        for depth in 50 200 1000; do
+          git merge-base "$base" "$head" >/dev/null 2>&1 && break
+          git fetch --no-tags --deepen="$depth" origin "$base" "$head" 2>/dev/null || true
+        done
+        git merge-base "$base" "$head" >/dev/null 2>&1 || git fetch --no-tags --unshallow origin 2>/dev/null || true
         echo "base=$base" >> "$GITHUB_OUTPUT"
         echo "head=$head" >> "$GITHUB_OUTPUT"
 
@@ -83,20 +98,48 @@ runs:
       shell: bash
       env:
         CLI: ${{ inputs.cli }}
+        RENDER: ${{ inputs.render }}
       run: |
         set -euo pipefail
         if [ -z "$CLI" ]; then
           cd "$GITHUB_ACTION_PATH"
+          pnpm="npx -y $(node -p 'require("./package.json").packageManager')"
           if [ ! -f dist/review/cli.mjs ]; then
-            pnpm="npx -y $(node -p 'require("./package.json").packageManager')"
             $pnpm install --frozen-lockfile >&2
             $pnpm build:review >&2
+          fi
+          # Rendering draws each chart with the embed in Chrome.
+          if [ -n "$RENDER" ] && [ ! -f public/embed/embed.js ]; then
+            $pnpm build:embed >&2
           fi
           CLI="node $GITHUB_ACTION_PATH/dist/review/cli.mjs"
         fi
         echo "cli=$CLI" >> "$GITHUB_OUTPUT"
 
+    - name: Render statecharts
+      if: inputs.render != ''
+      shell: bash
+      env:
+        CLI: ${{ steps.cli.outputs.cli }}
+        RENDER: ${{ inputs.render }}
+      run: |
+        set -euo pipefail
+        # shellcheck disable=SC2086
+        written=$($CLI render $RENDER | sed -n 's/^wrote //p')
+        [ -z "$written" ] && { echo "Statecharts are up to date."; exit 0; }
+        echo "$written" | sed 's/^/Rendered /'
+        if ! git symbolic-ref -q HEAD >/dev/null; then
+          echo "::error::render commits to a branch; check out the PR branch with actions/checkout, ref: github.head_ref"
+          exit 1
+        fi
+        while IFS= read -r file; do git add -- "$file"; done <<< "$written"
+        git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+          commit -m 'docs: render statecharts'
+        git push origin HEAD \
+          || { echo "::error::could not push the rendered statecharts (read-only token? fork PR?). Run the render locally and commit the SVGs."; exit 1; }
+
     - name: Review
+      if: inputs.render == ''
       id: review
       shell: bash
       env:
@@ -118,7 +161,7 @@ runs:
         echo "report=$out/review.md" >> "$GITHUB_OUTPUT"
 
     - name: Post review comment
-      if: inputs.comment == 'true' && github.event.pull_request
+      if: inputs.render == '' && inputs.comment == 'true' && github.event.pull_request
       shell: bash
       env:
         GH_TOKEN: ${{ inputs.github-token }}
@@ -145,7 +188,7 @@ runs:
         post || echo "::warning::could not post the statechart review comment (read-only token? fork PR?). The report is in the job summary."
 
     - name: Gate
-      if: inputs.fail-on-regression == 'true' && steps.review.outputs.risk == 'high'
+      if: inputs.render == '' && inputs.fail-on-regression == 'true' && steps.review.outputs.risk == 'high'
       shell: bash
       run: |
         echo "::error::statechart review: merge risk is high (see the review comment or job summary)"

@@ -62,4 +62,4 @@ The code may import `xstate`, `@xstate/effect` and `effect`. When it creates sev
 
 Open the page and confirm the chart draws. An event the machine doesn't accept, or a `machine` id the code doesn't create, shows its message inside the chart. Fix the attribute it names.
 
-For a README or pull request, where scripts can't run, export from the app instead: **Save → SVG image** or **Save → Animated SVG**. A docs build can call `await element.toAnimatedSvg({ title })` on a loaded chart from a headless browser to get its walkthrough as an animated SVG.
+For a README or pull request, where scripts can't run, link an SVG image and put the chart's source in a `statechart` fence inside a collapsed `<details>` block below it. The Autovisualizer action with `render: README.md` draws the image and commits it; see the README's "In READMEs, issues and pull requests" section. To export by hand, use **Save → SVG image** or **Save → Animated SVG** in the app. A docs build can call `await element.toAnimatedSvg({ title })` on a loaded chart from a headless browser to get its walkthrough as an animated SVG.

@@ -6,7 +6,7 @@
 
 /*
  * Two layers of tokens: shadcn's UI tokens (a neutral theme), and statechart tokens
- * (--sc-*) for the canvas: a grey grid, flat states, slate edges and grey pills.
+ * (--sc-*) for the canvas: a grey grid, shadowed states, light edges and grey pills.
  */
 :root,
 :host {
@@ -36,7 +36,7 @@
   --shadow-md: 0px 1px 2px 0px hsl(0 0% 0% / 0.18), 0px 2px 4px -1px hsl(0 0% 0% / 0.18);
   --shadow-lg: 0px 1px 2px 0px hsl(0 0% 0% / 0.18), 0px 4px 6px -1px hsl(0 0% 0% / 0.18);
 
-  /* Flat fills, 2px slate strokes, one blue. */
+  /* Shadowed states, 1.5px lines at 3:1 contrast, one blue. */
   --sc-canvas: #eff1f3;
   --sc-grid: #e6e9ec;
   --sc-node: #dfe3e7;
@@ -48,7 +48,7 @@
   --sc-header: #dfe3e7;
   --sc-pill: #f4f5f7;
   --sc-pill-fg: #15151d;
-  --sc-edge: #72758b;
+  --sc-edge: #868a9c;
   /* Drawn under every edge so lines stay crisp where they cross the grid. */
   --sc-casing: #fdfdfe;
   --sc-active: #005cde;

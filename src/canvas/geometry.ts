@@ -84,10 +84,27 @@ function samples(points: ReadonlyArray<Point>): Array<Point> {
   })
 }
 
+/** How far, in STEPs, a pill may move off ELK's spot when its line has no room. */
+const REACH = 20
+
+/**
+ * ELK's spot, or the free spot nearest it. ELK keeps its spot clear of states, but not of pills
+ * already moved onto their lines (two short opposite edges between the same states).
+ */
+function nearestFree(label: Rect, free: (rect: Rect) => boolean): Rect {
+  const offsets = Array.from({ length: REACH * 2 + 1 }, (_, i) => (i - REACH) * STEP)
+  return (
+    offsets
+      .flatMap((dx) => offsets.map((dy) => ({ ...label, x: label.x + dx, y: label.y + dy })))
+      .sort((a, b) => Math.hypot(a.x - label.x, a.y - label.y) - Math.hypot(b.x - label.x, b.y - label.y))
+      .find(free) ?? label
+  )
+}
+
 /**
  * Place every pill on its line, clear of states and of the pills placed before it, so no line
  * or pill ever covers text. Each pill takes the free spot on its own line nearest to where ELK
- * put it; with none free it keeps ELK's own spot, which ELK keeps clear.
+ * put it; with none free it takes the free spot nearest ELK's own.
  */
 export function placePills(
   edges: ReadonlyArray<{ readonly points: ReadonlyArray<Point>; readonly label: Rect }>,
@@ -100,7 +117,7 @@ export function placePills(
     const candidates = samples(points)
       .map((point) => centred(point, label))
       .sort((a, b) => Math.hypot(a.x - target.x, a.y - target.y) - Math.hypot(b.x - target.x, b.y - target.y))
-    const spot = [{ ...label, ...target }, ...candidates].find(free) ?? label
+    const spot = [{ ...label, ...target }, ...candidates].find(free) ?? nearestFree(label, free)
     placed.push(spot)
     return spot
   })
