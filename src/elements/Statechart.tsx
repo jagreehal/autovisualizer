@@ -13,7 +13,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
 import { COMPACT_FIT, Canvas } from "@/canvas/Canvas"
 import { layout } from "@/canvas/layout"
-import { countsByEdge, takenEdges } from "@/canvas/overlay"
+import { diffGraphs } from "@/canvas/diff"
+import { colorsByState, countsByEdge, takenEdges } from "@/canvas/overlay"
 import { toSvg } from "@/canvas/svg"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { MachineWorker } from "@/machine/client"
@@ -116,6 +117,19 @@ interface StatechartProps {
   counts?: Record<string, Record<string, number>>
   /** right, down, or auto (the default): whichever shows the chart larger in its space. */
   direction?: "auto" | "right" | "down"
+  /**
+   * The machine before a change, as a MachineJSON definition, or `#id` of the element holding one. The chart shows
+   * the change: added states and transitions in green, removed ones in red and dashed, and anything the change left
+   * unreachable flagged.
+   */
+  base?: JsonObject
+  /**
+   * A colour for each state, by its key or full id: any CSS colour, `{"payment":"purple","refund":"#e8a33d"}`. The
+   * state is filled with a wash of it, in light and dark themes alike.
+   */
+  colors?: Record<string, string>
+  /** A caption under the chart: what it shows, for every reader. Screen readers announce it with the chart. */
+  caption?: string
 }
 
 const STEP_MS = 1800
@@ -136,6 +150,7 @@ function fitHeight(chart: { readonly width: number; readonly height: number }, w
 const NO_STEPS: Array<WalkthroughStep> = []
 const NO_TRAIL: ReadonlyArray<string> = []
 const NO_COUNTS: Record<string, Record<string, number>> = {}
+const NO_COLORS: Record<string, string> = {}
 const NO_JSON: JsonObject = {}
 const eventOf = (step: WalkthroughStep) => (isString(step.event) ? { type: step.event } : step.event)
 
@@ -255,6 +270,9 @@ export default function Statechart({
   autoplay = false,
   counts = NO_COUNTS,
   direction = "auto",
+  base,
+  colors = NO_COLORS,
+  caption,
   speak = false,
   voice,
   rate,
@@ -281,6 +299,7 @@ export default function Statechart({
   const runtime = inPage ? runtimes.page : runtimes.worker
 
   const [graph, setGraph] = useState<MachineGraph | undefined>()
+  const [baseGraph, setBaseGraph] = useState<MachineGraph | undefined>()
   const [index, setIndex] = useState(0)
   const [sim, setSim] = useState<SimView | undefined>()
   const [step, setStep] = useState(0)
@@ -571,23 +590,56 @@ export default function Statechart({
     const below = anchor.current.clientHeight - (canvasBox.current?.clientHeight ?? 0)
     const canvas = Math.min(MAX_HEIGHT, Math.max(MIN_HEIGHT, fitHeight(chartSize, width)))
     element.style.setProperty("--autoviz-fit", `${Math.round(canvas + below)}px`)
-  }, [chartSize, width, walkthrough.length])
+  }, [chartSize, width, walkthrough.length, caption])
+
+  // Apart from `error`, so each new base clears only its own.
+  const [baseError, setBaseError] = useState<string | undefined>()
+  useEffect(() => {
+    setBaseGraph(undefined)
+    setBaseError(undefined)
+    if (base === undefined) return
+    let cancelled = false
+    // Data, never code: its own engine on the page, so the chart's simulation keeps its machine.
+    void import("@/machine/in-page")
+      .then(({ pageEngine }) => Effect.runPromise(pageEngine()({ _tag: "Load", id: 0, code: JSON.stringify(base) })))
+      .then((response) => {
+        if (cancelled || response._tag !== "Loaded") return
+        const found = response.machines.find((m) => m.id === graph?.id) ?? response.machines[0]
+        setBaseGraph(found)
+      })
+      .catch((cause: unknown) => !cancelled && setBaseError(`The base attribute: ${errorMessage(cause)}`))
+    return () => {
+      cancelled = true
+    }
+  }, [base, graph?.id])
+  const diffed = useMemo(
+    () => (graph === undefined || baseGraph === undefined ? undefined : diffGraphs(baseGraph, graph)),
+    [graph, baseGraph]
+  )
+  const stateColors = useMemo(() => (graph === undefined ? undefined : colorsByState(graph, colors)), [graph, colors])
 
   const edgeCounts = useMemo(() => (graph === undefined ? undefined : countsByEdge(graph, counts)), [graph, counts])
   const current = walkthrough[step - 1]
 
   return (
-    <div ref={anchor} className="flex h-full flex-col bg-sc-canvas font-sans text-foreground antialiased">
+    <div
+      ref={anchor}
+      role={caption === undefined ? undefined : "figure"}
+      aria-label={caption}
+      className="flex h-full flex-col bg-sc-canvas font-sans text-foreground antialiased"
+    >
       <style>{HOST + properties}</style>
-      {error !== undefined ? (
+      {(error ?? baseError) !== undefined ? (
         <p role="alert" className="p-4 font-mono text-sm text-destructive">
-          {error}
+          {error ?? baseError}
         </p>
       ) : graph === undefined ? null : (
         <TooltipProvider delayDuration={300}>
           <div ref={canvasBox} className="relative min-h-0 flex-1">
             <Canvas
-              graph={graph}
+              graph={diffed?.graph ?? graph}
+              changes={diffed?.changes}
+              colors={stateColors}
               simulation={simulation}
               selected={selected}
               onSelect={setSelected}
@@ -601,6 +653,11 @@ export default function Statechart({
               onLayout={setChartSize}
             />
           </div>
+          {caption !== undefined && (
+            <p className="shrink-0 border-t bg-background px-4 py-2.5 font-mono text-xs text-muted-foreground">
+              {caption}
+            </p>
+          )}
           {walkthrough.length > 0 && (
             <div
               role="group"

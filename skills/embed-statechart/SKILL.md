@@ -52,6 +52,9 @@ The code may import `xstate`, `@xstate/effect` and `effect`. When it creates sev
 - The chart has no title bar or breadcrumb. Name the machine in the page's prose or heading.
 - Readers scroll past a chart with the wheel or one finger. Mouse drag, or two fingers on a touch screen, pans and zooms it.
 - `direction` is `auto`, `right` or `down`. `auto` lays the chart out both ways and keeps the one that shows it larger.
+- `base` is the machine before a change (MachineJSON or `#id`): the chart marks added transitions and states green, removed ones red and dashed.
+- `colors` gives states a CSS colour by key or id: `colors='{"payment":"purple"}'`. `caption` adds a line under the chart. A state's `description` shows under its name.
+- Theme from page CSS with `--autoviz-*` properties, such as `auto-visualizer { --autoviz-active: #e11d48 }`; scope dark values to `prefers-color-scheme: dark`.
 - Leave `height` unset and the element sizes itself to the chart, from 240px to 720px plus the walkthrough bar. Set `height` in your CSS to fix it.
 - `theme` is `auto` (the reader's system setting), `light` or `dark`.
 - Final states draw green. Tag a final state `error` or `failure` to draw it red.

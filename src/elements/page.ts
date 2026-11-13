@@ -23,6 +23,8 @@ const INLINE = `${TAG}:not([code]) > script[type="text/typescript"]`
  */
 const INLINE_DEFINITION = `${TAG}:not([definition]) > script[type="application/json"]`
 const SHARED_DEFINITION = `${TAG}[definition^="#"]`
+/** `base="#checkout-before"`: the version a chart diffs against, shared the same way. */
+const SHARED_BASE = `${TAG}[base^="#"]`
 
 /** What Markdown renderers emit for a ```statechart fence: markdown-it, marked, Shiki, Expressive Code. */
 const FENCES = ["pre > code.language-statechart", "pre.language-statechart", "pre[data-language='statechart']"].join(
@@ -43,11 +45,16 @@ function upgrade() {
   for (const script of document.querySelectorAll(INLINE_DEFINITION)) {
     script.parentElement?.setAttribute("definition", script.textContent ?? "")
   }
-  for (const chart of document.querySelectorAll(SHARED_DEFINITION)) {
-    const ref = chart.getAttribute("definition") ?? ""
-    const source = document.getElementById(ref.slice(1))
-    // Left as it is when missing: the chart reports the attribute isn't JSON, naming what it was given.
-    if (source !== null) chart.setAttribute("definition", source.textContent ?? "")
+  for (const [selector, attribute] of [
+    [SHARED_DEFINITION, "definition"],
+    [SHARED_BASE, "base"]
+  ] as const) {
+    for (const chart of document.querySelectorAll(selector)) {
+      const ref = chart.getAttribute(attribute) ?? ""
+      const source = document.getElementById(ref.slice(1))
+      // Left as it is when missing: the chart reports the attribute isn't JSON, naming what it was given.
+      if (source !== null) chart.setAttribute(attribute, source.textContent ?? "")
+    }
   }
   if (!fencesOn) return
   for (const match of document.querySelectorAll(FENCES)) {

@@ -6,7 +6,9 @@
 
 /*
  * Two layers of tokens: shadcn's UI tokens (a neutral theme), and statechart tokens
- * (--sc-*) for the canvas: a grey grid, shadowed states, light edges and grey pills.
+ * (--sc-*) for the canvas: a grey grid, shadowed states, light edges and grey pills. A page themes a chart with
+ * --autoviz-* on the element (--autoviz-active for --sc-active), which inherit into the shadow root, where each
+ * --sc-* token reads its own.
  */
 :root,
 :host {
@@ -37,34 +39,37 @@
   --shadow-lg: 0px 1px 2px 0px hsl(0 0% 0% / 0.18), 0px 4px 6px -1px hsl(0 0% 0% / 0.18);
 
   /* Shadowed states, 1.5px lines at 3:1 contrast, one blue. */
-  --sc-canvas: #eff1f3;
-  --sc-grid: #e6e9ec;
-  --sc-node: #dfe3e7;
-  --sc-node-fg: #15151d;
-  --sc-node-border: #72758b;
-  --sc-parent: #eff1f3;
-  --sc-parent-border: #c9ced6;
-  --sc-parent-header: #f7f8f9;
-  --sc-header: #dfe3e7;
-  --sc-pill: #f4f5f7;
-  --sc-pill-fg: #15151d;
-  --sc-edge: #868a9c;
+  --sc-canvas: var(--autoviz-canvas, #eff1f3);
+  --sc-grid: var(--autoviz-grid, #e6e9ec);
+  --sc-node: var(--autoviz-node, #dfe3e7);
+  --sc-node-fg: var(--autoviz-node-fg, #15151d);
+  --sc-node-border: var(--autoviz-node-border, #72758b);
+  --sc-parent: var(--autoviz-parent, #eff1f3);
+  --sc-parent-border: var(--autoviz-parent-border, #c9ced6);
+  --sc-parent-header: var(--autoviz-parent-header, #f7f8f9);
+  --sc-header: var(--autoviz-header, #dfe3e7);
+  --sc-pill: var(--autoviz-pill, #f4f5f7);
+  --sc-pill-fg: var(--autoviz-pill-fg, #15151d);
+  --sc-edge: var(--autoviz-edge, #868a9c);
   /* Drawn under every edge so lines stay crisp where they cross the grid. */
-  --sc-casing: #fdfdfe;
-  --sc-active: #005cde;
-  --sc-active-fill: #dbe8fb;
-  --sc-final-fill: #c9edbc;
-  --sc-final-border: #54b559;
-  --sc-final-fg: #0c2612;
-  --sc-error-final-fill: #fadcd9;
-  --sc-error-final-border: #d94c3d;
-  --sc-error-final-fg: #3b0a06;
-  --sc-warn: #905900;
-  --sc-warn-fill: #fde283;
-  --sc-warn-border: #da931e;
-  --sc-warn-fg: #2e1e00;
-  --sc-inferred: #b7791f;
-  --sc-status: #5d6072;
+  --sc-casing: var(--autoviz-casing, #fdfdfe);
+  --sc-active: var(--autoviz-active, #005cde);
+  --sc-active-fill: var(--autoviz-active-fill, #dbe8fb);
+  --sc-final-fill: var(--autoviz-final-fill, #c9edbc);
+  --sc-final-border: var(--autoviz-final-border, #54b559);
+  /* A diff: what a change added, and what it removed. */
+  --sc-added: var(--autoviz-added, #2f9e44);
+  --sc-removed: var(--autoviz-removed, #d94c3d);
+  --sc-final-fg: var(--autoviz-final-fg, #0c2612);
+  --sc-error-final-fill: var(--autoviz-error-final-fill, #fadcd9);
+  --sc-error-final-border: var(--autoviz-error-final-border, #d94c3d);
+  --sc-error-final-fg: var(--autoviz-error-final-fg, #3b0a06);
+  --sc-warn: var(--autoviz-warn, #905900);
+  --sc-warn-fill: var(--autoviz-warn-fill, #fde283);
+  --sc-warn-border: var(--autoviz-warn-border, #da931e);
+  --sc-warn-fg: var(--autoviz-warn-fg, #2e1e00);
+  --sc-inferred: var(--autoviz-inferred, #b7791f);
+  --sc-status: var(--autoviz-status, #5d6072);
 }
 
 .dark {
@@ -88,33 +93,35 @@
   --input: oklch(0.32 0 0);
   --ring: oklch(0.72 0 0);
 
-  --sc-canvas: #15151d;
-  --sc-grid: #1c1c26;
-  --sc-node: #2e2f3c;
-  --sc-node-fg: #f5f7f7;
-  --sc-node-border: #72758b;
-  --sc-parent: #18181f;
-  --sc-parent-border: #34353f;
-  --sc-parent-header: #23242e;
-  --sc-header: #2e2f3c;
-  --sc-pill: #1f2029;
-  --sc-pill-fg: #f5f7f7;
-  --sc-edge: #72758b;
-  --sc-casing: #15151d;
-  --sc-active: #63a3fc;
-  --sc-active-fill: #13284a;
-  --sc-final-fill: #14371c;
-  --sc-final-border: #2f7a3d;
-  --sc-final-fg: #c9edbc;
-  --sc-error-final-fill: #3a1410;
-  --sc-error-final-border: #c24a3c;
-  --sc-error-final-fg: #fadcd9;
-  --sc-warn: #f8b632;
-  --sc-warn-fill: #432b00;
-  --sc-warn-border: #8a5a00;
-  --sc-warn-fg: #fde283;
-  --sc-inferred: #d9a441;
-  --sc-status: #9a9db0;
+  --sc-canvas: var(--autoviz-canvas, #15151d);
+  --sc-grid: var(--autoviz-grid, #1c1c26);
+  --sc-node: var(--autoviz-node, #2e2f3c);
+  --sc-node-fg: var(--autoviz-node-fg, #f5f7f7);
+  --sc-node-border: var(--autoviz-node-border, #72758b);
+  --sc-parent: var(--autoviz-parent, #18181f);
+  --sc-parent-border: var(--autoviz-parent-border, #34353f);
+  --sc-parent-header: var(--autoviz-parent-header, #23242e);
+  --sc-header: var(--autoviz-header, #2e2f3c);
+  --sc-pill: var(--autoviz-pill, #1f2029);
+  --sc-pill-fg: var(--autoviz-pill-fg, #f5f7f7);
+  --sc-edge: var(--autoviz-edge, #72758b);
+  --sc-casing: var(--autoviz-casing, #15151d);
+  --sc-active: var(--autoviz-active, #63a3fc);
+  --sc-active-fill: var(--autoviz-active-fill, #13284a);
+  --sc-final-fill: var(--autoviz-final-fill, #14371c);
+  --sc-final-border: var(--autoviz-final-border, #2f7a3d);
+  --sc-added: var(--autoviz-added, #4cb963);
+  --sc-removed: var(--autoviz-removed, #e5675a);
+  --sc-final-fg: var(--autoviz-final-fg, #c9edbc);
+  --sc-error-final-fill: var(--autoviz-error-final-fill, #3a1410);
+  --sc-error-final-border: var(--autoviz-error-final-border, #c24a3c);
+  --sc-error-final-fg: var(--autoviz-error-final-fg, #fadcd9);
+  --sc-warn: var(--autoviz-warn, #f8b632);
+  --sc-warn-fill: var(--autoviz-warn-fill, #432b00);
+  --sc-warn-border: var(--autoviz-warn-border, #8a5a00);
+  --sc-warn-fg: var(--autoviz-warn-fg, #fde283);
+  --sc-inferred: var(--autoviz-inferred, #d9a441);
+  --sc-status: var(--autoviz-status, #9a9db0);
 }
 
 @theme inline {
