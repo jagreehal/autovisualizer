@@ -18,6 +18,7 @@ import {
   CircleHelpIcon,
   CircleXIcon,
   ClockIcon,
+  ExpandIcon,
   HandIcon,
   LockIcon,
   LockOpenIcon,
@@ -25,11 +26,12 @@ import {
   MousePointer2Icon,
   PlayIcon,
   RotateCcwIcon,
+  ShrinkIcon,
   SlidersHorizontalIcon,
   TriangleAlertIcon,
   WorkflowIcon
 } from "lucide-react"
-import { createContext, use, useEffect, useState } from "react"
+import { createContext, use, useEffect, useRef, useState } from "react"
 
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
@@ -504,6 +506,37 @@ function ZoomControls({ locked, onLock }: ZoomControlsProps) {
   )
 }
 
+/** The <auto-visualizer> element, step controls included: the shadow root's host sits inside it. */
+function fullscreenTarget(button: HTMLElement) {
+  const root = button.getRootNode()
+  return root instanceof ShadowRoot ? root.host.parentElement : button.closest(".react-flow")
+}
+
+/** Shows the embed full screen. FitOnResize refits the chart when the element grows or shrinks back. */
+function FullscreenToggle() {
+  const button = useRef<HTMLButtonElement>(null)
+  const [full, setFull] = useState(false)
+  useEffect(() => {
+    const sync = () =>
+      setFull(button.current !== null && document.fullscreenElement === fullscreenTarget(button.current))
+    document.addEventListener("fullscreenchange", sync)
+    return () => document.removeEventListener("fullscreenchange", sync)
+  }, [])
+  return (
+    <button
+      ref={button}
+      type="button"
+      aria-label={full ? "Exit full screen" : "Full screen"}
+      className={cn(chrome, iconButton, "size-10")}
+      onClick={(event) =>
+        void (full ? document.exitFullscreen() : fullscreenTarget(event.currentTarget)?.requestFullscreen())
+      }
+    >
+      {full ? <ShrinkIcon className="size-4" /> : <ExpandIcon className="size-4" />}
+    </button>
+  )
+}
+
 const TOOLS = [
   { value: "select", label: "Inspect states", icon: MousePointer2Icon },
   { value: "pan", label: "Pan", icon: HandIcon },
@@ -641,6 +674,10 @@ export function Canvas({
   const [tool, setTool] = useState<Tool>("simulate")
   const [locked, setLocked] = useState(false)
   const [laidout, setLaidout] = useState<Laidout | undefined>()
+  // Shown in place of the chart when a layout throws.
+  const [layoutError, setLayoutError] = useState<string | undefined>()
+  const failed = (cause: unknown) =>
+    setLayoutError(`The chart couldn't be laid out: ${cause instanceof Error ? cause.message : String(cause)}`)
 
   // AUTO: lay out both ways and pick, then lay out the pick as usual (layouts of a docs-sized machine take
   // milliseconds; keeping one effect path is worth the third).
@@ -651,19 +688,22 @@ export function Canvas({
     void Promise.all([
       layout(graph, "RIGHT", !compact, counts, changes),
       layout(graph, "DOWN", !compact, counts, changes)
-    ]).then(([right, down]) => {
-      if (cancelled) return
-      const area = fitArea?.()
-      const fit = compact ? COMPACT_FIT : FIT
-      const inset = {
-        x: Number.parseFloat(fit.padding.x),
-        top: Number.parseFloat(fit.padding.top),
-        bottom: Number.parseFloat(fit.padding.bottom)
-      }
-      setDirection(
-        area === undefined || area.width === 0 ? "RIGHT" : roomier(size(right), size(down), area, inset, fit.maxZoom)
-      )
-    })
+    ]).then(
+      ([right, down]) => {
+        if (cancelled) return
+        const area = fitArea?.()
+        const fit = compact ? COMPACT_FIT : FIT
+        const inset = {
+          x: Number.parseFloat(fit.padding.x),
+          top: Number.parseFloat(fit.padding.top),
+          bottom: Number.parseFloat(fit.padding.bottom)
+        }
+        setDirection(
+          area === undefined || area.width === 0 ? "RIGHT" : roomier(size(right), size(down), area, inset, fit.maxZoom)
+        )
+      },
+      (cause: unknown) => !cancelled && failed(cause)
+    )
     return () => {
       cancelled = true
     }
@@ -672,17 +712,27 @@ export function Canvas({
   useEffect(() => {
     if (direction === undefined) return
     let cancelled = false
-    void layout(graph, direction, !compact, counts, changes).then((result) => {
-      if (cancelled) return
-      setLaidout(result)
-      const root = result.nodes[0]
-      if (root) onLayout?.({ width: root.width ?? 0, height: root.height ?? 0 })
-    })
+    void layout(graph, direction, !compact, counts, changes).then(
+      (result) => {
+        if (cancelled) return
+        setLayoutError(undefined)
+        setLaidout(result)
+        const root = result.nodes[0]
+        if (root) onLayout?.({ width: root.width ?? 0, height: root.height ?? 0 })
+      },
+      (cause: unknown) => !cancelled && failed(cause)
+    )
     return () => {
       cancelled = true
     }
   }, [graph, direction, compact, counts, changes, onLayout])
 
+  if (layoutError !== undefined)
+    return (
+      <p role="alert" className="h-full bg-sc-canvas p-4 font-mono text-sm text-destructive">
+        {layoutError}
+      </p>
+    )
   if (laidout === undefined) return <div className="h-full bg-sc-canvas" />
   return (
     <CanvasContext value={{ ...simulation, tool, selected, compact, counts, taken, changes, colors }}>
@@ -730,6 +780,12 @@ export function Canvas({
                 </span>
               ))}
             </nav>
+          </Panel>
+        )}
+        {/* Hidden where the page can't go fullscreen: an iframe without allow="fullscreen", or an iPhone. */}
+        {compact && document.fullscreenEnabled && (
+          <Panel position="top-right" className="!m-3">
+            <FullscreenToggle />
           </Panel>
         )}
         {/* Below 28rem the three toolbars would overlap: keep the tools, pinch or refit for zoom. */}

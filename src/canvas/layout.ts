@@ -195,7 +195,8 @@ export async function layout(
   changes: ReadonlyMap<string, Change> = new Map()
 ): Promise<Laidout> {
   // Measure with the real fonts: load them explicitly, since nothing on the page may use them yet.
-  await Promise.all(Object.values(FONT).map((font) => document.fonts.load(font)))
+  // A font the page blocks (a Content Security Policy, offline) rejects; measure with the fallback stack.
+  await Promise.all(Object.values(FONT).map((font) => document.fonts.load(font).catch(() => [])))
   const parents = new Map(parentsOf(graph.root))
   const states = new Map(indexStates(graph.root))
   const pills = new Map<string, Array<HeldPill>>()

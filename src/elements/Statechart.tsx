@@ -4,8 +4,10 @@
  */
 import "@/styles.css"
 
-import sansUrl from "@fontsource-variable/geist/files/geist-latin-wght-normal.woff2?url"
-import monoUrl from "@fontsource-variable/geist-mono/files/geist-mono-latin-wght-normal.woff2?url"
+// Inlined as data: URLs so the embed is one script: pages whose Content Security Policy only allows scripts from
+// the CDN (sandboxed iframes, Claude artifacts, locked-down docs sites) still get the fonts.
+import sansUrl from "@fontsource-variable/geist/files/geist-latin-wght-normal.woff2?inline"
+import monoUrl from "@fontsource-variable/geist-mono/files/geist-mono-latin-wght-normal.woff2?inline"
 
 import { Effect, ManagedRuntime, Schema } from "effect"
 import { ChevronLeftIcon, ChevronRightIcon, PauseIcon, PlayIcon } from "lucide-react"
