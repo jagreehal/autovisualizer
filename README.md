@@ -88,8 +88,28 @@ export const door = createMachine({ id: "door", initial: "closed", states: { clo
 | `audio-src` | A recorded clip per step: `audio-src="audio/{step}.wav"`. A clip that can't play falls back to `speak`. |
 | `counts` | How often each transition was taken, as JSON keyed by state then event: `{"payment":{"PAID":120,"DECLINED":0}}`. Each count shows on its event, and a transition taken 0 times is drawn dashed: a path the code allows that nothing took. Name a state by its key or its full id (`checkout.payment`). |
 | `direction` | `auto` (default), `right` or `down`. `auto` lays the chart out both ways and keeps the one that shows it larger in its space: a long chain goes top to bottom in a wide column, a wide machine left to right in a short box, and a small machine that fits either way goes right. |
+| `base` | The machine before a change, as MachineJSON or `#id` of an element holding it. The chart shows the change: added states and transitions in green, removed ones dashed and red, and a state the change left unreachable flagged. |
+| `colors` | A colour per state, as JSON keyed by state key or full id: `colors='{"payment":"purple","refund":"#e8a33d"}'`. Any CSS colour; the state gets a wash of it in light and dark themes alike. |
+| `caption` | A line under the chart saying what it shows. Screen readers announce the chart by it. |
 
 An event the machine doesn't accept, or a `machine` id it doesn't create, shows an error in the chart.
+
+A state's `description` (XState's own field) is drawn under its name, wrapped to fit.
+
+**Show a change.** Give the earlier version as `base`, and the chart draws the later one with what changed marked:
+
+```html
+<script type="application/json" id="checkout-before">{ ... }</script>
+<auto-visualizer src="/machines/checkout.json" base="#checkout-before"
+  caption="RETRY now loops back into payment; refund can no longer be reached."></auto-visualizer>
+```
+
+**Theme it.** Set the chart's colours from your own CSS with `--autoviz-*` properties: each overrides the chart token of the same name (`--autoviz-active` for the active ring and sendable events). They include `--autoviz-canvas`, `--autoviz-grid`, `--autoviz-node`, `--autoviz-node-fg`, `--autoviz-node-border`, `--autoviz-edge`, `--autoviz-pill`, `--autoviz-pill-fg`, `--autoviz-active`, `--autoviz-added` and `--autoviz-removed`; `src/styles.css` lists every `--sc-*` token. One value applies in both themes, so give the dark theme its own:
+
+```css
+auto-visualizer { --autoviz-active: #e11d48; --autoviz-canvas: #fffaf0; }
+@media (prefers-color-scheme: dark) { auto-visualizer { --autoviz-canvas: #1a1410; } }
+```
 
 **Narrate the walkthrough.** Each step's note is its script. Add `speak` and the browser reads each note aloud, and `autoplay` moves on when the sentence ends:
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import { countsByEdge, takenEdges } from "./overlay"
+import { colorsByState, countsByEdge, takenEdges } from "./overlay"
 
 import type { MachineGraph, StateGraphEdge, StateGraphNode } from "@/machine/graph"
 
@@ -76,5 +76,15 @@ describe("takenEdges", () => {
         { transition: "transfer.fetchRate:0", targets: ["transfer.done"] }
       ])
     ).toEqual(["transfer.validate:0:1", "transfer.fetchRate:0:0"])
+  })
+})
+
+describe("colorsByState", () => {
+  it("colours a state named by key or by full id, the id winning", () => {
+    const colors = colorsByState(graph, { validate: "red", fetchRate: "blue", "transfer.fetchRate": "#7c3aed" })
+    expect([...colors]).toEqual([
+      ["transfer.validate", "red"],
+      ["transfer.fetchRate", "#7c3aed"]
+    ])
   })
 })

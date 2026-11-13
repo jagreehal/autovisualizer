@@ -46,3 +46,16 @@ export function takenEdges(graph: MachineGraph, taken: SimView["taken"]): Readon
     )
     .map((edge) => edge.id)
 }
+
+/** Each coloured state's colour, by state id. A state is its key or its full id, as for counts; the id wins. */
+export function colorsByState(
+  graph: MachineGraph,
+  colors: Readonly<Record<string, string>>
+): ReadonlyMap<string, string> {
+  return new Map(
+    stateKeys(graph.root).flatMap(([id, key]) => {
+      const color = colors[id] ?? colors[key]
+      return color === undefined ? [] : [[id, color] as const]
+    })
+  )
+}

@@ -38,7 +38,9 @@ import { cn } from "@/lib/utils"
 
 import { finalTone } from "./final-tone"
 import { roomier } from "./geometry"
-import { SIZE, layout } from "./layout"
+import { SIZE, descriptionLines, layout } from "./layout"
+
+import type { Change } from "./diff"
 
 import type { Size } from "./geometry"
 import type { Direction, Laidout, Point, StateFlowNode, TransitionFlowEdge } from "./layout"
@@ -63,6 +65,10 @@ interface CanvasState extends Simulation {
   readonly counts: ReadonlyMap<string, number>
   /** Edges the replayed events took, drawn as the path so far. */
   readonly taken: ReadonlySet<string>
+  /** A diff's added and removed states and edges, by id. */
+  readonly changes: ReadonlyMap<string, Change>
+  /** A CSS colour the page gave a state, by state id. */
+  readonly colors: ReadonlyMap<string, string>
 }
 
 const CanvasContext = createContext<CanvasState>({
@@ -73,7 +79,18 @@ const CanvasContext = createContext<CanvasState>({
   selected: undefined,
   compact: false,
   counts: new Map(),
-  taken: new Set()
+  taken: new Set(),
+  changes: new Map(),
+  colors: new Map()
+})
+
+const CHANGE_COLOR = { added: "var(--sc-added)", removed: "var(--sc-removed)" } satisfies Record<Change, string>
+
+/** A state drawn in `color`: a wash of it for the fill, the colour itself for the border, a deeper shade for text. */
+const tint = (color: string) => ({
+  backgroundColor: `color-mix(in oklab, ${color} 22%, var(--sc-canvas))`,
+  borderColor: color,
+  color: `color-mix(in oklab, ${color} 40%, var(--sc-node-fg))`
 })
 
 interface FlagProps {
@@ -145,7 +162,10 @@ const dimmed = "opacity-60"
 
 function StateNodeView({ data }: NodeProps<StateFlowNode>) {
   const { state, machineId, isRoot, isInitial, isRegion, isUnreachable, hasUnresolved } = data
-  const { active, selected, compact } = use(CanvasContext)
+  const { active, selected, compact, changes, colors } = use(CanvasContext)
+  const change = changes.get(state.id)
+  // A diff's marks win over the page's colours: they say what the change did.
+  const color = change === undefined ? colors.get(state.id) : CHANGE_COLOR[change]
   const isActive = active.has(state.id)
   const isDimmed = active.size > 0 && !isActive
   const isSelected = selected === state.id
@@ -184,9 +204,11 @@ function StateNodeView({ data }: NodeProps<StateFlowNode>) {
           "relative h-full w-full rounded-[8px]",
           isRoot ? "bg-transparent" : "border-[3px] border-sc-parent-border bg-sc-parent/70",
           isRegion && "border-2 border-dashed",
+          change === "removed" && "border-dashed opacity-70",
           isDimmed && !isRoot && dimmed,
           ring
         )}
+        style={color === undefined || isRoot ? undefined : { borderColor: color }}
       >
         {decorations}
         {!(compact && isRoot) && (
@@ -216,27 +238,32 @@ function StateNodeView({ data }: NodeProps<StateFlowNode>) {
   }
 
   const finalKind = state.kind === "final" ? finalTone(state.tags) : undefined
+  const lines = descriptionLines(state)
   const tone = isUnreachable
     ? "border-sc-warn-border bg-sc-warn-fill text-sc-warn-fg"
-    : finalKind === "errorFinal"
-      ? "border-sc-error-final-border bg-sc-error-final-fill text-sc-error-final-fg"
-      : finalKind === "final"
-        ? "border-sc-final-border bg-sc-final-fill text-sc-final-fg"
-        : "border-sc-node-border/25 bg-sc-node text-sc-node-fg"
+    : color !== undefined
+      ? "border-2"
+      : finalKind === "errorFinal"
+        ? "border-sc-error-final-border bg-sc-error-final-fill text-sc-error-final-fg"
+        : finalKind === "final"
+          ? "border-sc-final-border bg-sc-final-fill text-sc-final-fg"
+          : "border-sc-node-border/25 bg-sc-node text-sc-node-fg"
   return (
     <div
       role="group"
       aria-label={state.key}
       aria-current={isActive || undefined}
+      aria-description={change === undefined ? undefined : `${change} in this change`}
       className={cn(
         "relative flex h-full w-full flex-col justify-center gap-1 rounded-[6px] border shadow-md",
         tone,
+        change === "removed" && "border-dashed opacity-70",
         // The active mark: a 4px blue ring standing 2px off the state.
         isActive && "outline-4 outline-offset-2 outline-sc-active",
         isDimmed && dimmed,
         ring
       )}
-      style={{ paddingInline: SIZE.leafPadX }}
+      style={{ paddingInline: SIZE.leafPadX, ...(color === undefined || isUnreachable ? undefined : tint(color)) }}
     >
       {decorations}
       <div className="flex items-center gap-2" style={{ height: state.invokes.length > 0 ? 30 : undefined }}>
@@ -245,8 +272,25 @@ function StateNodeView({ data }: NodeProps<StateFlowNode>) {
         ) : finalKind === "final" ? (
           <CircleDotIcon className="size-5 shrink-0" strokeWidth={2.5} />
         ) : null}
-        <span className="truncate text-xl leading-none font-semibold tracking-tight">{state.key}</span>
+        <span
+          className={cn(
+            "truncate text-xl leading-none font-semibold tracking-tight",
+            change === "removed" && "line-through"
+          )}
+        >
+          {state.key}
+        </span>
       </div>
+      {lines.length > 0 && (
+        // Broken where the layout measured it, so the state is exactly as tall as its text.
+        <p className="text-[13px] font-normal opacity-75" style={{ lineHeight: `${SIZE.descriptionLine}px` }}>
+          {lines.map((line, i) => (
+            <span key={i} className="block whitespace-nowrap">
+              {line}
+            </span>
+          ))}
+        </p>
+      )}
       <Chips invokes={state.invokes} />
     </div>
   )
@@ -293,9 +337,10 @@ function PillIcon({ edge }: { readonly edge: StateGraphEdge }) {
 }
 
 function TransitionEdgeView({ id, data }: EdgeProps<TransitionFlowEdge>) {
-  const { active, enabled, send, tool, counts, taken } = use(CanvasContext)
+  const { active, enabled, send, tool, counts, taken, changes } = use(CanvasContext)
   if (data === undefined) return null
   const { edge, points, label } = data
+  const change = changes.get(edge.id)
   const live = active.has(edge.source)
   const count = counts.get(edge.id)
   const isTaken = taken.has(edge.id)
@@ -313,9 +358,9 @@ function TransitionEdgeView({ id, data }: EdgeProps<TransitionFlowEdge>) {
         path={path}
         markerEnd="url(#sc-arrow)"
         style={{
-          stroke: isTaken ? "var(--sc-active)" : "var(--sc-edge)",
-          strokeWidth: isTaken ? 2.5 : 1.5,
-          strokeDasharray: isUnused ? "2 5" : edge.inferred ? "6 5" : undefined
+          stroke: isTaken ? "var(--sc-active)" : change === undefined ? "var(--sc-edge)" : CHANGE_COLOR[change],
+          strokeWidth: isTaken || change !== undefined ? 2.5 : 1.5,
+          strokeDasharray: isUnused ? "2 5" : edge.inferred || change === "removed" ? "6 5" : undefined
         }}
       />
       <EdgeLabelRenderer>
@@ -325,6 +370,7 @@ function TransitionEdgeView({ id, data }: EdgeProps<TransitionFlowEdge>) {
           aria-label={[
             edge.branch === undefined ? edge.label : `${edge.label} (branch ${edge.branch})`,
             count === undefined ? undefined : `taken ${count.toLocaleString()} times`,
+            change === undefined ? undefined : `${change} in this change`,
             isTaken ? "on the replayed path" : undefined
           ]
             .filter(Boolean)
@@ -340,6 +386,7 @@ function TransitionEdgeView({ id, data }: EdgeProps<TransitionFlowEdge>) {
               : "border-sc-node-border/40 text-sc-pill-fg",
             isTaken && "border-sc-active",
             isUnused && "border-dashed",
+            change === "removed" && "border-dashed line-through",
             edge.kind === "always" && "italic",
             edge.inferred && "border-dashed",
             // Sendable now: a solid blue pill.
@@ -347,6 +394,7 @@ function TransitionEdgeView({ id, data }: EdgeProps<TransitionFlowEdge>) {
               "cursor-pointer border-sc-active bg-sc-active text-sc-casing hover:brightness-110 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sc-active"
           )}
           style={{
+            ...(change === undefined || canSend ? undefined : { borderColor: CHANGE_COLOR[change], borderWidth: 2 }),
             transform: `translate(${label.x}px, ${label.y}px)`,
             width: label.width,
             height: SIZE.pillHeight,
@@ -557,12 +605,18 @@ export interface CanvasProps {
   readonly counts?: ReadonlyMap<string, number>
   /** Edges a replay took, highlighted as a path. */
   readonly taken?: ReadonlySet<string>
+  /** A diff's added and removed states and edges, by id (see diff.ts). */
+  readonly changes?: ReadonlyMap<string, Change>
+  /** A CSS colour for each state the page coloured, by state id. */
+  readonly colors?: ReadonlyMap<string, string>
   /** The laid-out chart's size, each time it is laid out. */
   readonly onLayout?: (size: { readonly width: number; readonly height: number }) => void
 }
 
 const NO_COUNTS: ReadonlyMap<string, number> = new Map()
 const NOT_TAKEN: ReadonlySet<string> = new Set()
+const NO_CHANGES: ReadonlyMap<string, Change> = new Map()
+const NO_COLORS: ReadonlyMap<string, string> = new Map()
 
 export function Canvas({
   graph,
@@ -575,6 +629,8 @@ export function Canvas({
   initialDirection = "RIGHT",
   counts = NO_COUNTS,
   taken = NOT_TAKEN,
+  changes = NO_CHANGES,
+  colors = NO_COLORS,
   onLayout,
   fitArea
 }: CanvasProps) {
@@ -592,30 +648,31 @@ export function Canvas({
     if (direction !== undefined) return
     let cancelled = false
     const size = (laid: Laidout): Size => ({ width: laid.nodes[0]?.width ?? 1, height: laid.nodes[0]?.height ?? 1 })
-    void Promise.all([layout(graph, "RIGHT", !compact, counts), layout(graph, "DOWN", !compact, counts)]).then(
-      ([right, down]) => {
-        if (cancelled) return
-        const area = fitArea?.()
-        const fit = compact ? COMPACT_FIT : FIT
-        const inset = {
-          x: Number.parseFloat(fit.padding.x),
-          top: Number.parseFloat(fit.padding.top),
-          bottom: Number.parseFloat(fit.padding.bottom)
-        }
-        setDirection(
-          area === undefined || area.width === 0 ? "RIGHT" : roomier(size(right), size(down), area, inset, fit.maxZoom)
-        )
+    void Promise.all([
+      layout(graph, "RIGHT", !compact, counts, changes),
+      layout(graph, "DOWN", !compact, counts, changes)
+    ]).then(([right, down]) => {
+      if (cancelled) return
+      const area = fitArea?.()
+      const fit = compact ? COMPACT_FIT : FIT
+      const inset = {
+        x: Number.parseFloat(fit.padding.x),
+        top: Number.parseFloat(fit.padding.top),
+        bottom: Number.parseFloat(fit.padding.bottom)
       }
-    )
+      setDirection(
+        area === undefined || area.width === 0 ? "RIGHT" : roomier(size(right), size(down), area, inset, fit.maxZoom)
+      )
+    })
     return () => {
       cancelled = true
     }
-  }, [graph, direction, compact, counts, fitArea])
+  }, [graph, direction, compact, counts, changes, fitArea])
 
   useEffect(() => {
     if (direction === undefined) return
     let cancelled = false
-    void layout(graph, direction, !compact, counts).then((result) => {
+    void layout(graph, direction, !compact, counts, changes).then((result) => {
       if (cancelled) return
       setLaidout(result)
       const root = result.nodes[0]
@@ -624,11 +681,11 @@ export function Canvas({
     return () => {
       cancelled = true
     }
-  }, [graph, direction, compact, counts, onLayout])
+  }, [graph, direction, compact, counts, changes, onLayout])
 
   if (laidout === undefined) return <div className="h-full bg-sc-canvas" />
   return (
-    <CanvasContext value={{ ...simulation, tool, selected, compact, counts, taken }}>
+    <CanvasContext value={{ ...simulation, tool, selected, compact, counts, taken, changes, colors }}>
       <ArrowMarkers />
       <ReactFlow
         key={`${graph.id}:${direction}`}

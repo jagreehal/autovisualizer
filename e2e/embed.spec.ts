@@ -340,6 +340,100 @@ test.describe("<auto-visualizer> layout, links and export", () => {
     expect(last.y - first.y).toBeGreaterThan(Math.abs(last.x - first.x))
   })
 
+  test("gives every event its own space: no pill covers another pill or a state", async ({ page, baseURL }) => {
+    const checkout = {
+      id: "checkout",
+      initial: "idle",
+      states: {
+        idle: { on: { ADD_ITEM: { target: "cart" } } },
+        cart: { on: { CHECKOUT: { target: "address" }, EMPTY: { target: "idle" } } },
+        address: { on: { SUBMIT: { target: "payment" } } },
+        payment: { on: { PAID: { target: "confirmed" }, FAIL: { target: "declined" } } },
+        declined: { on: { RETRY: { target: "payment" }, CANCEL: { target: "cart" }, REFUND: { target: "refund" } } },
+        refund: {},
+        confirmed: { type: "final" }
+      }
+    }
+    await docsPage(
+      page,
+      baseURL,
+      `<auto-visualizer id="toggle" style="height: 400px"><script type="application/json">${TOGGLE_JSON}</script></auto-visualizer>
+       <auto-visualizer id="checkout" direction="right" style="height: 600px" definition='${JSON.stringify(checkout)}'></auto-visualizer>`
+    )
+    for (const [id, count] of [
+      ["#toggle", 4],
+      ["#checkout", 16]
+    ] as const) {
+      const chart = page.locator(id)
+      // Leaf states (a parent's node lets clicks through to what it holds) and every pill.
+      const boxes = chart.locator(
+        ".react-flow__node:not([style*='pointer-events: none']), .react-flow__edgelabel-renderer button"
+      )
+      await expect(boxes.first()).toBeVisible()
+      const rects = await boxes.evaluateAll((elements) =>
+        elements.map((element) => element.getBoundingClientRect().toJSON())
+      )
+      expect(rects).toHaveLength(count)
+      for (const [i, a] of rects.entries())
+        for (const b of rects.slice(i + 1))
+          expect(
+            a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom,
+            `${JSON.stringify(a)} overlaps ${JSON.stringify(b)}`
+          ).toBe(false)
+    }
+  })
+
+  test("shows a change against a base version, the page's colours and a caption", async ({ page, baseURL }) => {
+    const before = {
+      id: "checkout",
+      initial: "payment",
+      states: {
+        payment: { on: { FAIL: { target: "declined" } } },
+        declined: { on: { REFUND: { target: "refund" } } },
+        refund: {}
+      }
+    }
+    const after = {
+      ...before,
+      states: {
+        payment: { description: "Waits for the bank", on: { FAIL: { target: "declined" } } },
+        declined: { on: { RETRY: { target: "payment" } } },
+        refund: {}
+      }
+    }
+    await docsPage(
+      page,
+      baseURL,
+      `<script type="application/json" id="before">${JSON.stringify(before)}</script>
+       <auto-visualizer id="diff" style="height: 400px" theme="light" base="#before" definition='${JSON.stringify(after)}'
+         colors='{"payment":"rgb(139, 92, 246)"}' caption="refund can no longer be reached"></auto-visualizer>`
+    )
+    const chart = page.locator("#diff")
+    await expect(chart.getByRole("figure", { name: "refund can no longer be reached" })).toBeVisible()
+    await expect(chart.getByRole("button", { name: "RETRY, added in this change" })).toBeVisible()
+    // Still drawn, so the reader sees what went, but nothing to send.
+    await expect(chart.getByRole("button", { name: "REFUND, removed in this change" })).toBeDisabled()
+    await expect(chart.getByRole("img", { name: /Unreachable/ })).toHaveCount(1)
+    const payment = chart.getByRole("group", { name: "payment", exact: true })
+    await expect(payment).toContainText("Waits for the bank")
+    await expect(payment).toHaveCSS("border-color", "rgb(139, 92, 246)")
+  })
+
+  test("a base that can't load says why, and fixing it takes the alert away", async ({ page, baseURL }) => {
+    const bad = { id: "toggle", states: { off: { entry: { "@code": "() => {}" } } } }
+    await docsPage(
+      page,
+      baseURL,
+      `<auto-visualizer id="fixed" style="height: 300px" base='${JSON.stringify(bad)}'
+         definition='${TOGGLE_JSON}'></auto-visualizer>`
+    )
+    const chart = page.locator("#fixed")
+    await expect(chart.getByRole("alert")).toContainText("The base attribute")
+    await chart.evaluate((element, base) => element.setAttribute("base", base), TOGGLE_JSON)
+    await expect(chart.getByRole("alert")).toHaveCount(0)
+    await expect(chart.getByRole("group", { name: "off", exact: true })).toBeVisible()
+  })
+
   test("resumes a persisted snapshot, and says why one doesn't fit", async ({ page, baseURL }) => {
     const ON = JSON.stringify({ status: "active", value: "on", context: {}, children: {}, historyValue: {} })
     const NOWHERE = JSON.stringify({ status: "active", value: "nowhere", context: {}, children: {} })
