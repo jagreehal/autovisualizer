@@ -22,13 +22,17 @@ export const SIZE = {
   descriptionLine: 18
 } as const
 
+// The stacks match --font-sans and --font-mono in styles.css, so a blocked Geist measures with what renders.
+const SANS = `'Geist Variable', ui-sans-serif, system-ui, sans-serif`
+const MONO = `'Geist Mono Variable', ui-monospace, monospace`
+
 export const FONT = {
-  state: "600 20px 'Geist Variable'",
-  parent: "600 16px 'Geist Variable'",
-  pill: "600 14px 'Geist Variable'",
-  chip: "500 12px 'Geist Mono Variable'",
-  description: "400 13px 'Geist Variable'",
-  count: "600 12px 'Geist Mono Variable'"
+  state: `600 20px ${SANS}`,
+  parent: `600 16px ${SANS}`,
+  pill: `600 14px ${SANS}`,
+  chip: `500 12px ${MONO}`,
+  description: `400 13px ${SANS}`,
+  count: `600 12px ${MONO}`
 } as const
 
 export interface Size {

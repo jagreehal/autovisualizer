@@ -51,6 +51,8 @@ The code may import `xstate`, `@xstate/effect` and `effect`. When it creates sev
 
 - The chart has no title bar or breadcrumb. Name the machine in the page's prose or heading.
 - Readers scroll past a chart with the wheel or one finger. Mouse drag, or two fingers on a touch screen, pans and zooms it.
+- The top-right button shows the chart full screen. In an iframe, add `allow="fullscreen"` to the iframe to show the button.
+- `embed.js` carries its stylesheet and fonts. A page with a strict Content Security Policy needs `script-src` for the embed's origin and `style-src 'unsafe-inline'`.
 - `direction` is `auto`, `right` or `down`. `auto` lays the chart out both ways and keeps the one that shows it larger.
 - `base` is the machine before a change (MachineJSON or `#id`): the chart marks added transitions and states green, removed ones red and dashed.
 - `colors` gives states a CSS colour by key or id: `colors='{"payment":"purple"}'`. `caption` adds a line under the chart. A state's `description` shows under its name.

@@ -9,7 +9,10 @@ interface Fixtures {
 }
 
 // Errors a test provokes on purpose and asserts on in the UI. Keep this list narrow.
-const EXPECTED: ReadonlyArray<RegExp> = []
+const EXPECTED: ReadonlyArray<RegExp> = [
+  // embed.spec.ts blocks the embed's inline fonts to check labels fit in the fallback font.
+  /Loading the font 'data:font\/woff2;.*"font-src 'none'"/
+]
 
 export const test = base.extend<Fixtures>({
   errorGuard: [

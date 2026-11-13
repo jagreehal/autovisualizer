@@ -319,6 +319,67 @@ test.describe("<auto-visualizer> with a MachineJSON definition", () => {
     // Straight away, not after the 5 second timeout, and naming the cause.
     await expect(page.locator("#code").getByRole("alert")).toContainText("opened from disk", { timeout: 3000 })
   })
+
+  // data: lets in the fonts the embed carries; 'none' blocks them too, so labels must fit in the fallback font.
+  // Long labels, so a font measured narrower than it renders overflows past the padding.
+  const LONG_JSON = JSON.stringify({
+    id: "toggle",
+    initial: "switched_off_and_waiting",
+    states: {
+      switched_off_and_waiting: { on: { FLIP_THE_WALL_SWITCH: { target: "switched_on_and_running" } } },
+      switched_on_and_running: { on: { FLIP_THE_WALL_SWITCH: { target: "switched_off_and_waiting" } } }
+    }
+  })
+  for (const fonts of ["data:", "'none'"]) {
+    test(`is styled and drawn on a page whose CSP allows only its script, font-src ${fonts}`, async ({
+      page,
+      baseURL
+    }, testInfo) => {
+      // Like a sandboxed artifact or a locked-down docs site: scripts from the embed's origin, inline styles, and
+      // nothing else, so a stylesheet fetched or a font loaded from the embed's origin is blocked. From disk, since
+      // Chrome's local network checks refuse a loopback page Playwright fulfils itself.
+      const csp = [
+        "default-src 'none'",
+        `script-src ${new URL(baseURL ?? "").origin}`,
+        "style-src 'unsafe-inline'",
+        "connect-src 'none'",
+        `font-src ${fonts}`
+      ].join("; ")
+      const file = testInfo.outputPath("locked-down.html")
+      const { writeFile } = await import("node:fs/promises")
+      await writeFile(
+        file,
+        `<!doctype html><meta http-equiv="Content-Security-Policy" content="${csp}">
+       <script type="module" src="${baseURL}/embed/embed.js"></script>
+       <auto-visualizer id="json" style="height: 300px"><script type="application/json">${LONG_JSON}</script></auto-visualizer>`
+      )
+      const blocked: Array<string> = []
+      page.on("requestfailed", (request) => blocked.push(request.url()))
+      page.on("console", (message) => {
+        const text = message.text()
+        // Blocking the fonts is the point of the 'none' run.
+        if (text.includes("Content Security Policy") && !text.includes("font-src")) blocked.push(text)
+      })
+
+      await page.goto(`file://${file}`)
+      const chart = page.locator("#json")
+      const off = chart.getByRole("group", { name: "switched_off_and_waiting", exact: true })
+      await expect(off).toHaveAttribute("aria-current", "true")
+      // Styled: React Flow positions nodes with its stylesheet, which now comes inside the script.
+      await expect(chart.locator(".react-flow__node").first()).toHaveCSS("position", "absolute")
+      await chart.getByRole("button", { name: "FLIP_THE_WALL_SWITCH" }).and(chart.locator(":enabled")).click()
+      await expect(chart.getByRole("group", { name: "switched_on_and_running", exact: true })).toHaveAttribute(
+        "aria-current",
+        "true"
+      )
+      // Measured in the font that rendered: no state name cut short, no pill text spilling out.
+      const overflowing = await chart
+        .locator(".truncate, .whitespace-nowrap")
+        .evaluateAll((all) => all.filter((el) => el.scrollWidth > el.clientWidth).map((el) => el.textContent))
+      expect(overflowing).toEqual([])
+      expect(blocked).toEqual([])
+    })
+  }
 })
 
 /** The element once its chart has loaded: the method a docs build calls from a headless browser. */
@@ -327,6 +388,27 @@ type Exporting = HTMLElement & {
 }
 
 test.describe("<auto-visualizer> layout, links and export", () => {
+  test("goes full screen and back, the chart refitted to each size", async ({ page, baseURL }) => {
+    await docsPage(
+      page,
+      baseURL,
+      `<auto-visualizer id="json" src="/toggle.machine.json" style="height: 300px"></auto-visualizer>`
+    )
+    const chart = page.locator("#json")
+    const off = chart.getByRole("group", { name: "off", exact: true })
+    await expect(off).toBeVisible()
+    const small = await off.boundingBox()
+
+    await chart.getByRole("button", { name: "Full screen", exact: true }).click()
+    await expect.poll(() => page.evaluate(() => document.fullscreenElement?.id)).toBe("json")
+    // Refitted to the bigger box: the state grows.
+    await expect.poll(async () => (await off.boundingBox())?.width ?? 0).toBeGreaterThan(small?.width ?? 0)
+
+    await chart.getByRole("button", { name: "Exit full screen" }).click()
+    await expect.poll(() => page.evaluate(() => document.fullscreenElement)).toBeNull()
+    await expect(chart).toHaveCSS("height", "300px")
+  })
+
   test("lays a long chain out top to bottom in a wide column", async ({ page, baseURL }) => {
     await docsPage(
       page,
