@@ -20,6 +20,8 @@ import { MachineWorker } from "@/machine/client"
 import { carriesCode, isString, JsonEvent } from "@/machine/json"
 import { codeFromDefinition } from "@/machine/definition"
 
+import { narrateStep, narrationStep } from "./narration"
+
 import type { Simulation } from "@/canvas/Canvas"
 import type { MachineGraph } from "@/machine/graph"
 import type { SimView } from "@/machine/simulate"
@@ -34,6 +36,19 @@ interface WalkthroughStep {
   /** What this step shows, under the chart. */
   note?: string
 }
+
+/** One walkthrough step, as `getSteps()`, the `step` event and `narrate` see it. */
+export interface NarrationStep {
+  /** 1-based, as the step counter and deep links (`#checkout/2`) count. */
+  index: number
+  event: string
+  note: string
+  /** What narration says: the note, or the event when the step has none. */
+  text: string
+}
+
+/** Audio for a step: a URL, or the bytes a speech model returned. Nothing falls back to `audio-src`, then `speak`. */
+export type Narrate = (step: NarrationStep) => Promise<string | Blob | undefined> | string | Blob | undefined
 
 interface StatechartProps {
   /** Machine source, TypeScript or JavaScript. It may import xstate, effect and the xstate effect package. Wins over `definition` and `src`. */
@@ -76,8 +91,23 @@ interface StatechartProps {
   events?: string
   /** Steps to walk through, each an event and a note. Adds step controls under the chart. */
   walkthrough?: Array<WalkthroughStep>
-  /** Step through the walkthrough on its own. Off for readers who ask for less motion. */
+  /** Step through the walkthrough on its own. Off for readers who ask for less motion. With narration, each step waits for its audio to end. */
   autoplay?: boolean
+  /** Read each step's note aloud with the browser's voice. */
+  speak?: boolean
+  /** A fragment of the browser voice's name for `speak`, matched case-insensitively: `samantha`. */
+  voice?: string
+  /** Speaking rate for `speak`, 0.1 to 10. */
+  rate?: number
+  /** A recorded clip per step, `{step}` standing for its index: `audio/{step}.mp3`. A clip that can't play falls back to `speak`. */
+  audioSrc?: string
+  /**
+   * Audio for each step from any speech model: return a URL or a Blob, or nothing to fall back to `audio-src` and
+   * `speak`. Set it as a property: `element.narrate = async (step) => …`.
+   */
+  narrate?: Narrate
+  /** Fires on each walkthrough step, played or stepped, with the step's index, event, note and spoken text. */
+  onStep?: (step: NarrationStep) => void
   /**
    * How often each transition was taken, by state then event: `{"payment":{"PAID":120,"DECLINED":0}}`. Each count
    * shows on its event, and a transition taken 0 times is drawn dashed. A state is its key or its full id.
@@ -89,6 +119,8 @@ interface StatechartProps {
 }
 
 const STEP_MS = 1800
+// Between a narrated step's end and the next: a breath, so it sounds like someone talking.
+const PAUSE_MS = 400
 // The height the chart fits itself to when the page sets none: tall enough to read, short enough to scroll past.
 const MIN_HEIGHT = 240
 const MAX_HEIGHT = 720
@@ -222,7 +254,13 @@ export default function Statechart({
   walkthrough = NO_STEPS,
   autoplay = false,
   counts = NO_COUNTS,
-  direction = "auto"
+  direction = "auto",
+  speak = false,
+  voice,
+  rate,
+  audioSrc,
+  narrate,
+  onStep
 }: StatechartProps) {
   // A definition with no code needs no worker: its engine runs on the page. Each element has its own of either, since
   // an engine holds a single simulation; a layer builds on first use, so the one this chart doesn't use costs nothing.
@@ -454,13 +492,44 @@ export default function Statechart({
     return () => removeEventListener("hashchange", follow)
   }, [graph, index, replay, walkthrough.length])
 
-  // Autoplay: one step at a time, stopping at the end.
+  // Narration: each step announced, then voiced. Hooks sit in refs, so a new function from the page doesn't re-narrate.
+  const hooks = useRef({ narrate, onStep })
+  hooks.current = { narrate, onStep }
+  const narrates = speak || audioSrc !== undefined || narrate !== undefined
+  // The step whose narration finished: autoplay moves on from it.
+  const [narrated, setNarrated] = useState(0)
+  useEffect(() => {
+    const walk = walkthrough[step - 1]
+    if (graph === undefined || walk === undefined) return
+    const detail = narrationStep(step, eventOf(walk).type, walk.note)
+    hooks.current.onStep?.(detail)
+    if (!narrates) return
+    setNarrated(0)
+    const controller = new AbortController()
+    void narrateStep(detail, { narrate: hooks.current.narrate, audioSrc, speak, voice, rate }, controller.signal).then(
+      () => !controller.signal.aborted && setNarrated(step)
+    )
+    return () => controller.abort()
+  }, [step, graph, walkthrough, narrates, audioSrc, speak, voice, rate])
+
+  // `element.getSteps()`: every step's text, to record clips with any speech model ahead of time.
+  useEffect(() => {
+    const element = host()
+    if (element === null) return
+    const getSteps = () => walkthrough.map((walk, i) => narrationStep(i + 1, eventOf(walk).type, walk.note))
+    Object.assign(element, { getSteps })
+    return () => void Reflect.deleteProperty(element, "getSteps")
+  }, [walkthrough])
+
+  // Autoplay: one step at a time, stopping at the end. A narrated step waits for its audio, then a breath.
   useEffect(() => {
     if (!playing || graph === undefined) return
     if (step >= walkthrough.length) return setPlaying(false)
-    const timer = setTimeout(() => void replay(index, step + 1), STEP_MS)
+    const voiced = narrates && step > 0
+    if (voiced && narrated !== step) return
+    const timer = setTimeout(() => void replay(index, step + 1), voiced ? PAUSE_MS : STEP_MS)
     return () => clearTimeout(timer)
-  }, [playing, step, graph, index, replay, walkthrough.length])
+  }, [playing, step, graph, index, replay, walkthrough.length, narrates, narrated])
 
   // Theme and the @property fallback live on the shadow root, which portals (tooltips, popovers) share.
   useEffect(() => {
