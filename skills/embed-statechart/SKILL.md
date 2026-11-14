@@ -60,6 +60,7 @@ The code may import `xstate`, `@xstate/effect` and `effect`. When it creates sev
 - Leave `height` unset and the element sizes itself to the chart, from 240px to 720px plus the walkthrough bar. Set `height` in your CSS to fix it.
 - `theme` is `auto` (the reader's system setting), `light` or `dark`.
 - Final states draw green. Tag a final state `error` or `failure` to draw it red.
+- Tag a state `shape:<name>` to draw a flowchart shape: `rect`, `rounded`, `stadium`, `subroutine`, `cylinder`, `circle`, `diamond`, `hexagon`, `parallelogram` or `trapezoid`. Add `color:<hex or name>` to colour one state, or set `--autoviz-shape-diamond` (any shape name) in page CSS to colour every state of that shape.
 - Charts load as they near the viewport. A page with ten charts loads the ones readers scroll to.
 - Styles stay inside a shadow root, so the page and the chart keep their own CSS.
 - `embed.d.ts` and `embed.react.d.ts` sit next to `embed.js` and type the element for TypeScript and JSX.

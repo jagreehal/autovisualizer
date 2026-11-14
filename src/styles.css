@@ -209,6 +209,43 @@
   color: var(--sc-status);
 }
 
+/* A shaped state takes its shape's colour, `--autoviz-shape-<name>`, washed like a state colour.
+   Unset, --sc-figure is invalid, so are the washes, and the state's own colours apply. */
+[data-figure] {
+  --sc-figure-fill: color-mix(in oklab, var(--sc-figure) 22%, var(--sc-canvas));
+  --sc-figure-fg: color-mix(in oklab, var(--sc-figure) 40%, var(--sc-node-fg));
+}
+[data-figure="rect"] {
+  --sc-figure: var(--autoviz-shape-rect);
+}
+[data-figure="rounded"] {
+  --sc-figure: var(--autoviz-shape-rounded);
+}
+[data-figure="stadium"] {
+  --sc-figure: var(--autoviz-shape-stadium);
+}
+[data-figure="subroutine"] {
+  --sc-figure: var(--autoviz-shape-subroutine);
+}
+[data-figure="cylinder"] {
+  --sc-figure: var(--autoviz-shape-cylinder);
+}
+[data-figure="circle"] {
+  --sc-figure: var(--autoviz-shape-circle);
+}
+[data-figure="diamond"] {
+  --sc-figure: var(--autoviz-shape-diamond);
+}
+[data-figure="hexagon"] {
+  --sc-figure: var(--autoviz-shape-hexagon);
+}
+[data-figure="parallelogram"] {
+  --sc-figure: var(--autoviz-shape-parallelogram);
+}
+[data-figure="trapezoid"] {
+  --sc-figure: var(--autoviz-shape-trapezoid);
+}
+
 /* The pan tool: a hand over the empty canvas. */
 [data-tool="pan"] .react-flow__pane {
   cursor: grab;

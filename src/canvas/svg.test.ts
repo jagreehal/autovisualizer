@@ -127,4 +127,58 @@ describe("toSvg", () => {
     expect(svg).not.toContain("<Toggle>")
     expect(svg).toMatch(/marker-end="url\(#autoviz-[a-z0-9]+-arrow\)"/)
   })
+
+  it("draws shape: tags as outlines and washes color: tags", () => {
+    const figureGraph = toMachineGraph(
+      createMachine({
+        id: "order",
+        initial: "validate",
+        states: {
+          validate: { tags: ["shape:rect"], on: { NEXT: { target: "approval" } } },
+          approval: { tags: ["shape:diamond", "color:#6b71a8"], on: { yes: { target: "done" } } },
+          done: { type: "final", tags: ["end"] }
+        }
+      }),
+      undefined
+    )
+    const node = (id: string, position: { x: number; y: number }, size: { width: number; height: number }) => {
+      const found = [figureGraph.root, ...figureGraph.root.children].find((s) => s.id === id)
+      if (found === undefined) throw new Error(`no state ${id}`)
+      const flow: StateFlowNode = {
+        id: `s:${id}`,
+        type: "state",
+        position,
+        ...size,
+        parentId: id === "order" ? undefined : "s:order",
+        data: {
+          state: found,
+          machineId: "order",
+          isRoot: id === "order",
+          isInitial: id === "order.validate",
+          isRegion: false,
+          isUnreachable: false,
+          hasUnresolved: false
+        }
+      }
+      return flow
+    }
+    const figureLaidout: Laidout = {
+      nodes: [
+        node("order", { x: 0, y: 0 }, { width: 420, height: 260 }),
+        node("order.validate", { x: 28, y: 74 }, { width: 120, height: 46 }),
+        node("order.approval", { x: 180, y: 74 }, { width: 120, height: 60 }),
+        node("order.done", { x: 330, y: 74 }, { width: 90, height: 40 })
+      ],
+      edges: []
+    }
+    const svg = toSvg(figureLaidout, [{ active: ["order", "order.validate"], caption: "start" }], {
+      title: "Order"
+    })
+    // The diamond, 180,74 120×60 inside the 28px-padded machine, washed by its colour tag.
+    expect(svg).toContain('<path d="M240 74 L300 104 L240 134 L180 104 Z" fill="color-mix(in oklab, #6b71a8 22%')
+    // An unknown-to-shapes tag like `end` changes nothing: the final keeps its box and ring mark.
+    expect(svg).toMatch(/<rect x="[\d.]+" y="[\d.]+" width="90" height="40" rx="6" fill="var\(--finalFill\)"/)
+    // The active ring follows the rect shape's outline.
+    expect(svg).toMatch(/<path class="r0" d="M/)
+  })
 })

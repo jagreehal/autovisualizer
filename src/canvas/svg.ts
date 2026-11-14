@@ -3,6 +3,7 @@
  * request, an issue. Several frames make it an animation that steps through them with CSS alone.
  * Pure and deterministic: the same chart and frames always give the same bytes.
  */
+import { figureOf, outlinePath, tagColor } from "./figure"
 import { finalTone } from "./final-tone"
 import { SIZE } from "./geometry"
 
@@ -150,30 +151,42 @@ export function toSvg(laidout: Laidout, frames: ReadonlyArray<Frame>, options: S
       continue
     }
     const tone = isUnreachable ? "warn" : state.kind === "final" ? finalTone(state.tags) : undefined
-    const fill = tone ? `var(--${tone}Fill)` : "var(--node)"
-    const stroke = tone ? `var(--${tone}Border)` : "var(--stroke)"
-    const color = tone ? `var(--${tone}Fg)` : "var(--fg)"
-    states.push(`<rect ${box} rx="6" fill="${fill}" stroke="${stroke}" stroke-width="2"/>`)
+    // A `color:` tag washes the state like the editor's tint; validated, so safe in an attribute.
+    const wash = isUnreachable ? undefined : tagColor(state.tags)
+    const fill = wash ? `color-mix(in oklab, ${wash} 22%, var(--canvas))` : tone ? `var(--${tone}Fill)` : "var(--node)"
+    const stroke = wash ?? (tone ? `var(--${tone}Border)` : "var(--stroke)")
+    const color = wash ? `color-mix(in oklab, ${wash} 40%, var(--fg))` : tone ? `var(--${tone}Fg)` : "var(--fg)"
+    const figure = figureOf(state.tags)
+    states.push(
+      figure === undefined
+        ? `<rect ${box} rx="6" fill="${fill}" stroke="${stroke}" stroke-width="2"/>`
+        : `<path d="${outlinePath(figure, at.x, at.y, w, h)}" fill="${fill}" stroke="${stroke}" stroke-width="2"/>`
+    )
+    // Content sits in the box the layout measured, centred inside a shape's padded one.
+    const content = node.data.content ?? { width: w, height: h }
+    const left = at.x + (w - content.width) / 2
+    const top = at.y + (h - content.height) / 2
+    const inner = content.width
     // The name sits in the top row when invoke chips fill the rows below it.
-    const nameY = state.invokes.length > 0 ? at.y + SIZE.leafHeight / 2 : at.y + h / 2
+    const nameY = state.invokes.length > 0 ? top + SIZE.leafHeight / 2 : at.y + h / 2
     if (state.kind === "final") {
       // The final-state mark: a ring with a dot, before the name.
-      const cx = at.x + SIZE.leafPadX + SIZE.finalIcon / 2
+      const cx = left + SIZE.leafPadX + SIZE.finalIcon / 2
       states.push(
         `<circle cx="${n(cx)}" cy="${n(nameY)}" r="7.5" fill="none" stroke="${color}" stroke-width="2.5"/>`,
         `<circle cx="${n(cx)}" cy="${n(nameY)}" r="2.5" fill="${color}"/>`,
         text(cx + SIZE.finalIcon / 2 + 8, nameY, 20, color, state.key)
       )
     } else if (state.invokes.length > 0) {
-      states.push(text(at.x + SIZE.leafPadX, nameY, 20, color, state.key))
+      states.push(text(left + SIZE.leafPadX, nameY, 20, color, state.key))
     } else {
       states.push(text(at.x + w / 2, nameY, 20, color, state.key, "middle"))
     }
     state.invokes.forEach((src, i) => {
-      const top = at.y + SIZE.leafHeight - 6 + i * (SIZE.chipHeight + SIZE.chipGap)
+      const chipY = top + SIZE.leafHeight - 6 + i * (SIZE.chipHeight + SIZE.chipGap)
       states.push(
-        `<rect x="${n(at.x + SIZE.leafPadX)}" y="${n(top)}" width="${n(w - SIZE.leafPadX * 2)}" height="${SIZE.chipHeight}" rx="5" fill="var(--canvas)" stroke="var(--stroke)" stroke-opacity="0.4"/>`,
-        `<text x="${n(at.x + SIZE.leafPadX + 8)}" y="${n(top + SIZE.chipHeight / 2)}" dominant-baseline="central" font-family="ui-monospace, monospace" font-size="12" fill="var(--fg)" fill-opacity="0.85">invoke ${escape(src)}</text>`
+        `<rect x="${n(left + SIZE.leafPadX)}" y="${n(chipY)}" width="${n(inner - SIZE.leafPadX * 2)}" height="${SIZE.chipHeight}" rx="5" fill="var(--canvas)" stroke="var(--stroke)" stroke-opacity="0.4"/>`,
+        `<text x="${n(left + SIZE.leafPadX + 8)}" y="${n(chipY + SIZE.chipHeight / 2)}" dominant-baseline="central" font-family="ui-monospace, monospace" font-size="12" fill="var(--fg)" fill-opacity="0.85">invoke ${escape(src)}</text>`
       )
     })
     // The active mark, a 4px blue ring 2px off the state, shown in the frames it's active.
@@ -181,7 +194,9 @@ export function toSvg(laidout: Laidout, frames: ReadonlyArray<Frame>, options: S
     if (!shown.includes("1")) continue
     const ring = `r${css.length}`
     states.push(
-      `<rect class="${ring}" x="${n(at.x - 4)}" y="${n(at.y - 4)}" width="${n(w + 8)}" height="${n(h + 8)}" rx="9" fill="none" stroke="var(--active)" stroke-width="4"/>`
+      figure === undefined
+        ? `<rect class="${ring}" x="${n(at.x - 4)}" y="${n(at.y - 4)}" width="${n(w + 8)}" height="${n(h + 8)}" rx="9" fill="none" stroke="var(--active)" stroke-width="4"/>`
+        : `<path class="${ring}" d="${outlinePath(figure, at.x - 4, at.y - 4, w + 8, h + 8)}" fill="none" stroke="var(--active)" stroke-width="4"/>`
     )
     css.push(`.${ring}{opacity:${shown.at(-1)}}`)
     if (animated)

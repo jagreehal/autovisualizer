@@ -240,6 +240,7 @@ Paste a machine into [the app](https://auto-visualizer.vercel.app) and you get i
 - **Step-through simulation.** Click an event pill and the machine takes that transition. You fire invoked actors and timers yourself: send `done: deploy` or `after 30000ms` when you want them. Add a payload with a custom event, and set the machine's input before a reset.
 - **Problems flagged.** Unreachable states get a warning badge, and the Validations panel lists them with the transitions it can't draw.
 - **Outcomes at a glance.** Final states draw green. Tag a final state `error` or `failure` (`tags: ["error"]`) and it draws red, in the editor, embeds and SVG exports.
+- **Flowchart shapes.** Tag a state `shape:<name>` to draw it as a flowchart shape, using Mermaid's names: `rect`, `rounded`, `stadium`, `subroutine`, `cylinder`, `circle`, `diamond`, `hexagon`, `parallelogram` or `trapezoid`. Add `color:<hex or name>` to wash it in a colour (`tags: ["shape:diamond", "color:#6b71a8"]`), or colour every state of a shape from your CSS with `--autoviz-shape-<name>` (`--autoviz-shape-diamond: #6b71a8`). A state's own colour wins over its shape's, and SVG exports take their colours from `color:` tags. Untagged states keep the rounded box.
 - **Sharing.** Share a link that carries the code. Save the code as `.ts`, or export XState's MachineJSON. Open either kind of file. Your code autosaves in the browser.
 
 ## Agent skills
