@@ -1,5 +1,11 @@
 # autovisualizer
 
+## 0.9.0
+
+### Minor Changes
+
+- 75b3a07: Draw states as flowchart shapes. Tag a state `shape:diamond`, `shape:cylinder` or any of ten Mermaid shape names, colour it with `color:#6b71a8`, or theme a whole shape with `--autoviz-shape-diamond`. Shapes size to their labels in the editor, embeds and SVG exports.
+
 ## 0.8.0
 
 ### Minor Changes
