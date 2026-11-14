@@ -6,9 +6,11 @@
  * Each transition's pill is a node of its own, `source → pill → target`: ELK spaces pills like
  * states, so no pill covers another pill, a state or a line.
  */
+import { figureOf, figureSize } from "./figure"
 import { FONT, SIZE, ancestry, pillHome, wrap } from "./geometry"
 
 import type { Change } from "./diff"
+import type { Size } from "./geometry"
 
 import ELK from "elkjs/lib/elk.bundled.js"
 
@@ -36,6 +38,8 @@ export interface StateNodeData extends Record<string, unknown> {
   readonly isRegion: boolean
   readonly isUnreachable: boolean
   readonly hasUnresolved: boolean
+  /** A shaped leaf's label, chips and description, centred in its bigger box. Absent: the whole box. */
+  readonly content?: Size
 }
 
 export interface TransitionEdgeData extends Record<string, unknown> {
@@ -70,7 +74,8 @@ const chipWidth = (src: string) => textWidth(`invoke ${src}`, FONT.chip) + 38
 export const descriptionLines = (state: StateGraphNode) =>
   wrap(state.description ?? "", SIZE.descriptionWidth, (line) => textWidth(line, FONT.description))
 
-function leafSize(state: StateGraphNode) {
+/** What a leaf's label, chips and description need, before a figure grows the box around them. */
+function contentSize(state: StateGraphNode) {
   const icon = state.kind === "final" ? SIZE.finalIcon + 8 : 0
   const chips = state.invokes.length * (SIZE.chipHeight + SIZE.chipGap)
   const lines = descriptionLines(state)
@@ -85,6 +90,14 @@ function leafSize(state: StateGraphNode) {
     height:
       SIZE.leafHeight + (chips > 0 ? chips + 4 : 0) + (lines.length > 0 ? lines.length * SIZE.descriptionLine + 8 : 0)
   }
+}
+
+function leafSize(state: StateGraphNode) {
+  const content = contentSize(state)
+  const figure = figureOf(state.tags)
+  if (figure === undefined) return content
+  const box = figureSize(figure, content.width, content.height)
+  return { width: Math.ceil(box.width), height: Math.ceil(box.height) }
 }
 
 interface HeldPill {
@@ -275,7 +288,8 @@ export async function layout(
         isInitial: parent?.initial === state.id,
         isRegion: parent?.kind === "parallel",
         isUnreachable: unreachable.has(state.id) && changes.get(state.id) !== "removed",
-        hasUnresolved: unresolved.has(state.id)
+        hasUnresolved: unresolved.has(state.id),
+        content: state.children.length === 0 && figureOf(state.tags) !== undefined ? contentSize(state) : undefined
       }
     }
     return [node, ...(elkNode.children ?? []).flatMap((child) => flatten(child, elkNode.id))]

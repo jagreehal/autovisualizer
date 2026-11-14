@@ -38,11 +38,14 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
 
+import { figureOf, outlinePath, tagColor } from "./figure"
 import { finalTone } from "./final-tone"
 import { roomier } from "./geometry"
 import { SIZE, descriptionLines, layout } from "./layout"
 
 import type { Change } from "./diff"
+import type { Figure } from "./figure"
+import type { FinalTone } from "./final-tone"
 
 import type { Size } from "./geometry"
 import type { Direction, Laidout, Point, StateFlowNode, TransitionFlowEdge } from "./layout"
@@ -162,12 +165,76 @@ const tag =
 /** While a simulation runs, what the active states can't reach steps back. */
 const dimmed = "opacity-60"
 
-function StateNodeView({ data }: NodeProps<StateFlowNode>) {
+interface Paint {
+  readonly fill: string
+  readonly stroke: string
+  readonly fg: string
+}
+
+/** A shaped state's colours as CSS values: its outline is an SVG path, not a border. */
+function figurePaint(isUnreachable: boolean, color: string | undefined, finalKind: FinalTone | undefined): Paint {
+  if (isUnreachable) return { fill: "var(--sc-warn-fill)", stroke: "var(--sc-warn-border)", fg: "var(--sc-warn-fg)" }
+  if (color !== undefined) {
+    const { backgroundColor, borderColor, color: fg } = tint(color)
+    return { fill: backgroundColor, stroke: borderColor, fg }
+  }
+  // Below the state's own colours, the theme's `--autoviz-shape-<name>` (see styles.css) wins.
+  const base =
+    finalKind === "errorFinal"
+      ? { fill: "var(--sc-error-final-fill)", stroke: "var(--sc-error-final-border)", fg: "var(--sc-error-final-fg)" }
+      : finalKind === "final"
+        ? { fill: "var(--sc-final-fill)", stroke: "var(--sc-final-border)", fg: "var(--sc-final-fg)" }
+        : {
+            fill: "var(--sc-node)",
+            stroke: "color-mix(in oklab, var(--sc-node-border) 25%, transparent)",
+            fg: "var(--sc-node-fg)"
+          }
+  return {
+    fill: `var(--sc-figure-fill, ${base.fill})`,
+    stroke: `var(--sc-figure, ${base.stroke})`,
+    fg: `var(--sc-figure-fg, ${base.fg})`
+  }
+}
+
+interface FigureOutlineProps {
+  readonly figure: Figure
+  readonly width: number
+  readonly height: number
+  readonly paint: Paint
+  readonly dashed: boolean
+  readonly active: boolean
+}
+
+/** Drawn behind the state's content and never clipped, so badges, markers and rings stay visible. */
+function FigureOutline({ figure, width, height, paint, dashed, active }: FigureOutlineProps) {
+  return (
+    <svg aria-hidden className="pointer-events-none absolute inset-0 -z-10 size-full overflow-visible drop-shadow-md">
+      <path
+        d={outlinePath(figure, 1, 1, width - 2, height - 2)}
+        fill={paint.fill}
+        stroke={paint.stroke}
+        strokeWidth={2}
+        strokeDasharray={dashed ? "6 4" : undefined}
+      />
+      {/* The active mark follows the outline, 2px off it like the boxes' ring. */}
+      {active && (
+        <path
+          d={outlinePath(figure, -4, -4, width + 8, height + 8)}
+          fill="none"
+          stroke="var(--sc-active)"
+          strokeWidth={4}
+        />
+      )}
+    </svg>
+  )
+}
+
+function StateNodeView({ data, width = 0, height = 0 }: NodeProps<StateFlowNode>) {
   const { state, machineId, isRoot, isInitial, isRegion, isUnreachable, hasUnresolved } = data
   const { active, selected, compact, changes, colors } = use(CanvasContext)
   const change = changes.get(state.id)
-  // A diff's marks win over the page's colours: they say what the change did.
-  const color = change === undefined ? colors.get(state.id) : CHANGE_COLOR[change]
+  // A diff's marks win over the page's colours, and those over the state's own `color:` tag.
+  const color = change === undefined ? (colors.get(state.id) ?? tagColor(state.tags)) : CHANGE_COLOR[change]
   const isActive = active.has(state.id)
   const isDimmed = active.size > 0 && !isActive
   const isSelected = selected === state.id
@@ -241,6 +308,8 @@ function StateNodeView({ data }: NodeProps<StateFlowNode>) {
 
   const finalKind = state.kind === "final" ? finalTone(state.tags) : undefined
   const lines = descriptionLines(state)
+  const figure = figureOf(state.tags)
+  const paint = figurePaint(isUnreachable, color, finalKind)
   const tone = isUnreachable
     ? "border-sc-warn-border bg-sc-warn-fill text-sc-warn-fg"
     : color !== undefined
@@ -256,17 +325,34 @@ function StateNodeView({ data }: NodeProps<StateFlowNode>) {
       aria-label={state.key}
       aria-current={isActive || undefined}
       aria-description={change === undefined ? undefined : `${change} in this change`}
+      data-figure={figure}
       className={cn(
-        "relative flex h-full w-full flex-col justify-center gap-1 rounded-[6px] border shadow-md",
-        tone,
-        change === "removed" && "border-dashed opacity-70",
+        "relative flex h-full w-full flex-col justify-center gap-1",
+        figure === undefined
+          ? ["rounded-[6px] border shadow-md", tone, change === "removed" && "border-dashed"]
+          : "isolate items-center text-center",
+        change === "removed" && "opacity-70",
         // The active mark: a 4px blue ring standing 2px off the state.
-        isActive && "outline-4 outline-offset-2 outline-sc-active",
+        isActive && figure === undefined && "outline-4 outline-offset-2 outline-sc-active",
         isDimmed && dimmed,
         ring
       )}
-      style={{ paddingInline: SIZE.leafPadX, ...(color === undefined || isUnreachable ? undefined : tint(color)) }}
+      style={
+        figure === undefined
+          ? { paddingInline: SIZE.leafPadX, ...(color === undefined || isUnreachable ? undefined : tint(color)) }
+          : { paddingInline: SIZE.leafPadX, color: paint.fg }
+      }
     >
+      {figure !== undefined && (
+        <FigureOutline
+          figure={figure}
+          width={width}
+          height={height}
+          paint={paint}
+          dashed={change === "removed"}
+          active={isActive}
+        />
+      )}
       {decorations}
       <div className="flex items-center gap-2" style={{ height: state.invokes.length > 0 ? 30 : undefined }}>
         {finalKind === "errorFinal" ? (

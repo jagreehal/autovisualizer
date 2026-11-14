@@ -62,4 +62,25 @@ export const router = createMachine({
     await expect(visualizer.summary).toContainText("machine: approvalMachine")
     await expect(visualizer.canvas.state("awaitingApproval")).toHaveAttribute("aria-current", "true")
   })
+
+  test("a shape's CSS variable colours that shape, below a state's own color: tag", async ({ page, visualizer }) => {
+    await visualizer.gotoWithCode(`import { createMachine } from "xstate"
+export const flow = createMachine({
+  id: "flow",
+  initial: "a",
+  states: {
+    a: { tags: ["shape:diamond"], on: { GO: { target: "b" } } },
+    b: { tags: ["shape:hexagon"], on: { GO: { target: "c" } } },
+    c: { tags: ["shape:diamond", "color:red"] }
+  }
+})`)
+    await visualizer.assertLoaded()
+    await page.addStyleTag({ content: ":root { --autoviz-shape-diamond: rgb(0, 128, 0); }" })
+    const outline = (key: string) => visualizer.canvas.state(key).locator("path").first()
+
+    await expect(outline("a")).toHaveCSS("stroke", "rgb(0, 128, 0)")
+    // Unset, the variable falls through to the default node colours.
+    await expect(outline("b")).toHaveCSS("fill", "rgb(223, 227, 231)")
+    await expect(outline("c")).toHaveCSS("stroke", "rgb(255, 0, 0)")
+  })
 })
