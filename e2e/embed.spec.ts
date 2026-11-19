@@ -103,6 +103,33 @@ test.describe("The <auto-visualizer> embed", () => {
     await expect(page.locator("#wrong").getByRole("alert")).toHaveText('"NOPE" isn\'t accepted in state "off"')
   })
 
+  test("draws and steps a Mermaid state diagram written in the tag, and says why a bad one can't", async ({
+    page,
+    baseURL
+  }) => {
+    await docsPage(
+      page,
+      baseURL,
+      `<auto-visualizer id="mermaid" style="height: 300px">
+         <script type="text/mermaid">
+           stateDiagram-v2
+             [*] --> off
+             off --> on : TOGGLE
+             on --> off : TOGGLE
+         </script>
+       </auto-visualizer>
+       <auto-visualizer id="flowchart" style="height: 120px">
+         <script type="text/mermaid">flowchart LR
+           A --> B</script>
+       </auto-visualizer>`
+    )
+    const chart = page.locator("#mermaid")
+    await expect(chart.getByRole("group", { name: "off", exact: true })).toHaveAttribute("aria-current", "true")
+    await chart.getByRole("button", { name: "TOGGLE" }).first().click()
+    await expect(chart.getByRole("group", { name: "on", exact: true })).toHaveAttribute("aria-current", "true")
+    await expect(page.locator("#flowchart").getByRole("alert")).toContainText("Not a Mermaid state diagram")
+  })
+
   test("opens in a named state with input and context, and walks through events that carry data", async ({
     page,
     baseURL

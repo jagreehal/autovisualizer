@@ -44,7 +44,7 @@ import checkoutExample from "@/examples/checkout.ts?raw"
 import parallelExample from "@/examples/parallel.ts?raw"
 import { cn } from "@/lib/utils"
 import { MachineWorker } from "@/machine/client"
-import { codeFromDefinition } from "@/machine/definition"
+import { codeFromDefinition, codeFromMermaid } from "@/machine/definition"
 import { unreachableStates } from "@/machine/graph"
 import { autosave, initialCode, saveFile, shareLink } from "@/storage/document"
 
@@ -251,9 +251,14 @@ export function App() {
   const openFile = async (file: File | undefined) => {
     if (file === undefined) return
     const text = await file.text()
-    if (!file.name.endsWith(".json")) return replaceCode(text, `Opened ${file.name}`)
-    // A MachineJSON definition: wrap it in machineFromJSON so it is code like any other.
-    const result = await Effect.runPromise(Effect.result(codeFromDefinition(text, file.name)))
+    // A MachineJSON definition or a Mermaid state diagram becomes code like any other; anything else is code.
+    const imported = file.name.endsWith(".json")
+      ? codeFromDefinition(text, file.name)
+      : /\.(mmd|mermaid)$/.test(file.name)
+        ? codeFromMermaid(text, file.name)
+        : undefined
+    if (imported === undefined) return replaceCode(text, `Opened ${file.name}`)
+    const result = await Effect.runPromise(Effect.result(imported))
     if (result._tag === "Failure")
       return void toast.error("Not a machine definition", { description: result.failure.message })
     replaceCode(result.success, `Imported ${file.name}`)
@@ -301,7 +306,12 @@ export function App() {
       label: "Export animated SVG of the simulation…",
       run: () => void exportSvg(true)
     },
-    { id: "open", group: "Actions", label: "Open .ts or MachineJSON file…", run: () => fileInput.current?.click() },
+    {
+      id: "open",
+      group: "Actions",
+      label: "Open .ts, MachineJSON or Mermaid file…",
+      run: () => fileInput.current?.click()
+    },
     { id: "new", group: "Actions", label: "New machine", run: () => replaceCode(BLANK, "New machine") },
     {
       id: "restart",
@@ -408,7 +418,7 @@ export function App() {
               ref={fileInput}
               type="file"
               aria-label="Open file"
-              accept=".ts,.tsx,.js,.mjs,.json"
+              accept=".ts,.tsx,.js,.mjs,.json,.mmd,.mermaid"
               className="hidden"
               onChange={(event) => {
                 void openFile(event.target.files?.[0])
