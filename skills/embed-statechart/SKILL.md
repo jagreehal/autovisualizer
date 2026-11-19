@@ -32,7 +32,8 @@ Pick one source:
 
 2. **A file.** `<auto-visualizer src="/machines/checkout.ts">`. A `.json` URL loads XState MachineJSON.
 3. **A definition.** Put XState MachineJSON in a `<script type="application/json">` inside the tag. The chart draws and steps it on the page with no Web Worker, so it works on a page opened from disk and in sandboxed iframes. Several charts can share one: give the script an `id` and write `definition="#checkout"` on each chart. A definition with `@code` or `@expr` runs that code in the worker.
-4. **Markdown.** Add `<meta name="auto-visualizer-fences" content="on">` to the page's `<head>`, and a fenced block tagged `statechart` becomes a chart. This covers markdown-it, marked, Shiki and Expressive Code (Starlight), including pages a single-page app renders later. Fences run their code with the page's origin: leave the tag off pages where visitors write Markdown, such as comments or wikis.
+4. **A Mermaid diagram.** Put a `stateDiagram-v2` in a `<script type="text/mermaid">` inside the tag. Arrow labels become events, `[*]` marks initial and final states, `state X { }` nests and `--` splits parallel regions. To keep the result as code, run `node dist/review/cli.mjs mermaid diagram.mmd -o machine.ts`.
+5. **Markdown.** Add `<meta name="auto-visualizer-fences" content="on">` to the page's `<head>`, and a fenced block tagged `statechart` becomes a chart. This covers markdown-it, marked, Shiki and Expressive Code (Starlight), including pages a single-page app renders later. Fences run their code with the page's origin: leave the tag off pages where visitors write Markdown, such as comments or wikis.
 
 The code may import `xstate`, `@xstate/effect` and `effect`. When it creates several machines, pick one with `machine="id"`.
 

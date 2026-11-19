@@ -10,10 +10,15 @@
  * `render`: draws the statecharts Markdown files link to as SVG images (see render.ts).
  *
  *   node dist/review/cli.mjs render README.md docs/guide.md [--embed public/embed]
+ *
+ * `mermaid`: converts a Mermaid state diagram (a file, or stdin) to an XState machine module.
+ *
+ *   node dist/review/cli.mjs mermaid diagram.mmd [-o machine.ts]
  */
-import { writeFileSync } from "node:fs"
+import { readFileSync, writeFileSync } from "node:fs"
 import { parseArgs } from "node:util"
 
+import { machineFromMermaid } from "../mermaid/mermaid"
 import { defaultEmbedDir, renderMarkdown } from "./render"
 import { buildReview, renderReviewMarkdown } from "./review"
 
@@ -36,6 +41,13 @@ if (positionals[0] === "render") {
   for (const path of written) console.log(`wrote ${path}`)
   for (const failure of failed) console.error(`::error::${failure}`)
   process.exit(failed.length > 0 ? 1 : 0)
+}
+if (positionals[0] === "mermaid") {
+  const code = machineFromMermaid(readFileSync(positionals[1] ?? 0, "utf8"))
+  if (values.output) writeFileSync(values.output, code)
+  // Exit once stdout has taken every byte: exiting straight away cuts piped output at the pipe's buffer.
+  else await new Promise((done) => process.stdout.write(code, done))
+  process.exit(0)
 }
 // A leading `review` is the command name, not a path.
 const paths = positionals[0] === "review" ? positionals.slice(1) : positionals

@@ -48,6 +48,21 @@ The inner `<script type="text/typescript">` keeps the source as raw text, so `<`
 
 A definition with `@code` or `@expr` carries code, so it runs in the worker like any other.
 
+**Got a Mermaid diagram? Bring it.** Write a Mermaid `stateDiagram-v2` in `<script type="text/mermaid">` and it becomes a machine you can step through. The converter loads only on pages that use it:
+
+```html
+<auto-visualizer>
+  <script type="text/mermaid">
+    stateDiagram-v2
+      [*] --> off
+      off --> on : TOGGLE
+      on --> off : TOGGLE
+  </script>
+</auto-visualizer>
+```
+
+Arrow labels become events, and an arrow without a label gets the event `source--target`. `[*]` marks the initial and final states, `state X { }` nests states and `--` splits them into parallel regions. `state "Long name" as X` and `X : text` become the state's description. A state lives where it is first named, unless an enclosing block claims it with `state X`, `[*] --> X` or `X --> [*]`. Notes, `direction` and styling are skipped. `<<choice>>`, `<<fork>>` and `<<join>>` become plain states, because a diagram doesn't say what their guards are. The same conversion opens `.mmd` files in the editor, and `node dist/review/cli.mjs mermaid diagram.mmd -o machine.ts` runs it from the command line (it reads stdin when no file is given).
+
 **Markdown docs need one tag.** Add `<meta name="auto-visualizer-fences" content="on">` to the page's `<head>`, and every fenced block tagged `statechart` becomes a chart. That covers markdown-it, marked, Shiki and Expressive Code (Starlight) output, and pages a single-page app renders later. Fences run their code with your page's origin, so leave the tag off pages where visitors write Markdown:
 
 ````md
@@ -241,7 +256,7 @@ Paste a machine into [the app](https://auto-visualizer.vercel.app) and you get i
 - **Problems flagged.** Unreachable states get a warning badge, and the Validations panel lists them with the transitions it can't draw.
 - **Outcomes at a glance.** Final states draw green. Tag a final state `error` or `failure` (`tags: ["error"]`) and it draws red, in the editor, embeds and SVG exports.
 - **Flowchart shapes.** Tag a state `shape:<name>` to draw it as a flowchart shape, using Mermaid's names: `rect`, `rounded`, `stadium`, `subroutine`, `cylinder`, `circle`, `diamond`, `hexagon`, `parallelogram` or `trapezoid`. Add `color:<hex or name>` to wash it in a colour (`tags: ["shape:diamond", "color:#6b71a8"]`), or colour every state of a shape from your CSS with `--autoviz-shape-<name>` (`--autoviz-shape-diamond: #6b71a8`). A state's own colour wins over its shape's, and SVG exports take their colours from `color:` tags. Untagged states keep the rounded box.
-- **Sharing.** Share a link that carries the code. Save the code as `.ts`, or export XState's MachineJSON. Open either kind of file. Your code autosaves in the browser.
+- **Sharing.** Share a link that carries the code. Save the code as `.ts`, or export XState's MachineJSON. Open either kind of file, or a Mermaid state diagram (`.mmd`), which converts to machine code. Your code autosaves in the browser.
 
 ## Agent skills
 

@@ -16,6 +16,8 @@ document.head.append(style)
  * TypeScript survive, and the browser neither runs nor shows it. A `code` attribute wins.
  */
 const INLINE = `${TAG}:not([code]) > script[type="text/typescript"]`
+/** A Mermaid state diagram inside the tag, `<script type="text/mermaid">`, converted to machine code here. */
+const INLINE_MERMAID = `${TAG}:not([code]) > script[type="text/mermaid"]`
 
 /**
  * A MachineJSON definition inside the tag, `<script type="application/json">`, or shared by several charts on the
@@ -42,6 +44,24 @@ function upgrade() {
   for (const script of document.querySelectorAll(INLINE)) {
     script.parentElement?.setAttribute("code", script.textContent ?? "")
   }
+  const diagrams = document.querySelectorAll(INLINE_MERMAID)
+  // Its own chunk, so pages without a diagram don't download the converter.
+  if (diagrams.length > 0)
+    void import("../mermaid/mermaid").then(({ machineFromMermaid }) => {
+      for (const script of diagrams) {
+        // Rechecked after the import: the page may have moved the script or given the chart code meanwhile.
+        const chart = script.parentElement
+        if (chart?.localName !== TAG || chart.hasAttribute("code")) continue
+        // A diagram that doesn't parse becomes code that throws, so the chart shows the reason.
+        let code: string
+        try {
+          code = machineFromMermaid(script.textContent ?? "")
+        } catch (error) {
+          code = `throw new Error(${JSON.stringify(error instanceof Error ? error.message : String(error))})`
+        }
+        chart.setAttribute("code", code)
+      }
+    })
   for (const script of document.querySelectorAll(INLINE_DEFINITION)) {
     script.parentElement?.setAttribute("definition", script.textContent ?? "")
   }

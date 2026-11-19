@@ -74,3 +74,29 @@ test.describe("XState MachineJSON", () => {
     await expect(visualizer.summary).toContainText("machine: checkout")
   })
 })
+
+test.describe("Mermaid import", () => {
+  test("opens a Mermaid state diagram as a machine, and rejects one that isn't", async ({ visualizer }) => {
+    await visualizer.goto()
+
+    await visualizer.openFile(
+      "checkout.mmd",
+      `stateDiagram-v2
+  [*] --> Idle
+  Idle --> Checkout : BUY
+  state "Paying for it" as Checkout {
+    [*] --> Card
+    Card --> Done : PAY
+    Card --> [*] : CANCEL
+  }
+  Done --> Idle : RESET`
+    )
+    await expect(visualizer.summary).toContainText("5 states")
+    await expect(visualizer.summary).toContainText("4 transitions")
+
+    await visualizer.openFile("flow.mmd", "flowchart LR\n  A --> B")
+    await expect(visualizer.notifications.getByText("Not a machine definition")).toBeVisible()
+    await expect(visualizer.notifications.getByText(/flow\.mmd: Not a Mermaid state diagram/)).toBeVisible()
+    await expect(visualizer.summary).toContainText("5 states")
+  })
+})

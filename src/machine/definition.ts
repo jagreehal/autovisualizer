@@ -1,8 +1,10 @@
 /**
- * MachineJSON files in and out. An imported definition becomes a one-line module, so
+ * Machine files in and out. An imported definition (MachineJSON or a Mermaid state diagram) becomes a module, so
  * share links, autosave and the editor treat it like any other code.
  */
 import { Effect, Schema } from "effect"
+
+import { machineFromMermaid } from "../mermaid/mermaid"
 
 export class DefinitionError extends Schema.TaggedError<DefinitionError>()("DefinitionError", {
   message: Schema.String
@@ -27,3 +29,11 @@ export const codeFromDefinition = (jsonText: string, fileName: string) =>
       ].join("\n")
     })
   )
+
+/** TypeScript for a Mermaid state diagram: the machine it describes. */
+export const codeFromMermaid = (text: string, fileName: string) =>
+  Effect.try({
+    try: () => machineFromMermaid(text),
+    catch: (error) =>
+      new DefinitionError({ message: `${fileName}: ${error instanceof Error ? error.message : String(error)}` })
+  })
